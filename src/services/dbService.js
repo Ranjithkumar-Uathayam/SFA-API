@@ -61,7 +61,7 @@ async function getProductData(lastSyncDate, offset = 0, limit = 500) {
     .input('offset', sql.Int, offset)
     .input('limit', sql.Int, limit)
     .query(query);
-
+    console.log("result.recordset",result.recordset)
   return result.recordset;
 }
 

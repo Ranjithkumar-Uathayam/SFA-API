@@ -7,7 +7,17 @@
  * One payload per ProductCode
  */
 
-const { Decimal } = require("mssql");
+// Formats a numeric tax value to a 2-decimal-place string e.g. "5.00"
+// Business rule: 12% tax is automatically upgraded to 18%
+const TAX_REMAP = {
+  "12.00": "18.00"
+};
+
+function formatTax(val) {
+  if (val == null) return null;
+  const formatted = Number(val).toFixed(2);
+  return TAX_REMAP[formatted] ?? formatted;
+}
 
 function mapToSalesforcePayload(rows) {
   if (!rows || rows.length === 0) return [];
@@ -112,7 +122,7 @@ function mapToSalesforcePayload(rows) {
       !taxes.some(t => t.EvalExpression === 'Price < 2500')
     ) {
       taxes.push({
-        TaxPer: Decimal(row.TaxBelow2500),
+        TaxPer: formatTax(row.TaxBelow2500),
         EvalExpression: 'Price < 2500'
       });
     }
@@ -122,7 +132,7 @@ function mapToSalesforcePayload(rows) {
       !taxes.some(t => t.EvalExpression === 'Price >= 2500')
     ) {
       taxes.push({
-        TaxPer: Decimal(row.TaxAbove2500),
+        TaxPer: formatTax(row.TaxAbove2500),
         EvalExpression: 'Price >= 2500'
       });
     }
@@ -198,98 +208,35 @@ function mapToSalesforcePayload(rows) {
   return Array.from(map.values());
 }
 
-module.exports = {
-  mapToSalesforcePayload
-};
+function mapToPriceListPayload(sqlRows) {
+    if (!sqlRows || sqlRows.length === 0) return [];
 
+    return sqlRows.map(row => ({
+        ProductCode: row.ProductCode,
+        PriceListID: row.PriceListID,
+        SubBrandCode: row.SubBrandCode,
+        BPProductName: row.BPProductName,
+        PriceLisCode: row.PriceLisCode,
+        EffectiveFrom: row.EffectiveFrom,
+        EffectiveTo: row.EffectiveTo,
+        IsActive: row.IsActive,
+        BPCategory: row.BPCategory,
+        Price: row.Price,
+        MRP: row.MRP
+    }));
+}
 
-// function mapToSalesforcePayload(row) {
-//   return {
-//     Product: {
-//       ProductCode: row.ProductCode,
-//       ProductName: row.ProductName,
-//       IsActive: row.ProductIsActive,
-//       GroupCode: row.ProductGroupCode,
-//       ShortDesc: row.ShortDesc,
-//       DetailedDesc: row.DetailedDesc,
-//       CategoryName: row.CategoryName,
-//       StyleCode: row.StyleCode,
-//       SizeCode: row.SizeCode,
-//       DivisionCode: row.DivisionCode,
-//       UOM: row.UOM,
-//       AttributeSetName: row.AttributeSetName,
-//       SizeGroup: row.SizeGroup,
-//       HSNCode: row.HSNCode,
-//       Brand: row.Brand,
-//       SalPackUn: row.SalPackUn,
-//       DfltWH: row.DfltWH,
-//       Sku: row.ProductCode,
-//       Popularity: 0,
-//       HideItem: 0,
-//       SortBy: 0,
-//       PreBooking: 1,
-//       Tag: row.ProductName
-//     },
-//     ProductColors: [
-//       {
-//         ColorCode: row.ColorCode,
-//         ColorName: row.ColorName,
-//         Color: row.Color,
-//         IsActive: 1,
-//         Shade: row.Shade,
-//         Min_Qty: row.Min_Qty || 1,
-//         Max_Qty: row.Max_Qty || 100000,
-//         IsCoreColor: row.IsCoreColor
-//       }
-//     ],
-//     ProductTaxes: [
-//       [
-//         {
-//           TaxPer: Number(row.TaxBelow2500),
-//           EvalExpression: "Price < 2500"
-//         },
-//         {
-//           TaxPer: Number(row.TaxAbove2500),
-//           EvalExpression: "Price >= 2500"
-//         }
-//       ]
-//     ],
-//     ProductSubBrands: [
-//       {
-//         SubBrandCode: row.SubBrandCode,
-//         BPProductName: row.ProductName,
-//         DisplayName: row.ProductName,
-//         IsActive: 1,
-//         SKU: null,
-//         AltSKU: null
-//       }
-//     ],
-//     ProductDefaults: [
-//       {
-//         GroupCode: row.ProductGroupCode,
-//         StyleCode: row.StyleCode,
-//         SizeCode: row.SizeCode,
-//         ColorCode: row.ColorCode,
-//         IsActive: 1,
-//         DivisionCode: row.DivisionCode
-//       }
-//     ],
-//     PROD_PRODUCTGROUP: [
-//       {
-//         GroupCode: row.ProductGroupCode,
-//         IsActive: 1,
-//         SortingVal: 1
-//       }
-//     ],
-//     ProductGroupGroupping: [
-//       {
-//         GroupingName: row.CategoryName,
-//         GroupCode: row.ProductGroupCode,
-//         IsActive: 1
-//       }
-//     ]
-//   }
-// }
+function mapToImagePayload(sqlRows) {
+    if (!sqlRows || sqlRows.length === 0) return [];
+
+    return sqlRows.map(row => ({
+        skuCode: row.skuCode,
+        ColorCode: row.ColorCode,
+        fileName: row.fileName,
+        Description: row.Description,
+        base64Data: row.base64Data
+    }));
+}
 
 function groupByProduct(rows) {
   const map = {};
@@ -325,14 +272,14 @@ function groupByProduct(rows) {
     // ---------- TAXES ----------
     if (row.TaxBelow2500 !== null) {
       map[row.ProductCode].taxes.push({
-        TaxPer: Decimal(row.TaxBelow2500),
+        TaxPer: formatTax(row.TaxBelow2500),
         EvalExpression: "Price < 2500"
       });
     }
 
     if (row.TaxAbove2500 !== null) {
       map[row.ProductCode].taxes.push({
-        TaxPer: Decimal(row.TaxAbove2500),
+        TaxPer: formatTax(row.TaxAbove2500),
         EvalExpression: "Price >= 2500"
       });
     }
@@ -413,38 +360,6 @@ function buildPayload(product) {
       }
     ]
   };
-}
-
-
-function mapToPriceListPayload(sqlRows) {
-    if (!sqlRows || sqlRows.length === 0) return [];
-
-    return sqlRows.map(row => ({
-        ProductCode: row.ProductCode,
-        PriceListID: row.PriceListID, // Note: SQL has duplicates, last one wins usually
-        SubBrandCode: row.SubBrandCode,
-        BPProductName: row.BPProductName,
-        PriceLisCode: row.PriceLisCode,
-        EffectiveFrom: row.EffectiveFrom,
-        EffectiveTo: row.EffectiveTo,
-        // IsActive appears twice. Assuming the Logic is same or last one wins.
-        IsActive: row.IsActive,
-        BPCategory: row.BPCategory,
-        Price: row.Price,
-        MRP: row.MRP
-    }));
-}
-
-function mapToImagePayload(sqlRows) {
-    if (!sqlRows || sqlRows.length === 0) return [];
-
-    return sqlRows.map(row => ({
-        skuCode: row.skuCode,
-        ColorCode: row.ColorCode,
-        fileName: row.fileName,
-        Description: row.Description,
-        base64Data: row.base64Data
-    }));
 }
 
 module.exports = {

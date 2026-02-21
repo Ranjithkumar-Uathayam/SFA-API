@@ -216,10 +216,10 @@ function mapToPriceListPayload(sqlRows) {
         PriceListID: row.PriceListID,
         SubBrandCode: row.SubBrandCode,
         BPProductName: row.BPProductName,
-        PriceLisCode: row.PriceLisCode,
+        PriceLisCode: row.PriceListCode,
         EffectiveFrom: row.EffectiveFrom,
         EffectiveTo: row.EffectiveTo,
-        IsActive: row.IsActive,
+        IsActive: row.PriceListIsActive,
         BPCategory: row.BPCategory,
         Price: row.Price,
         MRP: row.MRP

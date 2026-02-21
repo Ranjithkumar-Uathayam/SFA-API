@@ -80,8 +80,6 @@ exports.syncPriceLists = async (req, res) => {
       return res.status(200).json({ message: 'No valid price data to sync.' });
     }
 
-    console.log('📤 Sending data to Salesforce');
-
     const sfResponse = await sfService.upsertPriceLists(payload);
 
     return res.status(200).json({

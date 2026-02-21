@@ -138,9 +138,7 @@ async function getPriceListData() {
                 INNER JOIN [BBLive].[dbo].[@INS_OPLM] T1 ON T0.DocEntry = T1.DocEntry
                 INNER JOIN [BBLive].[dbo].[@INS_PLM1] T2 ON T0.DocEntry = T2.DocEntry
             ) B ON B.U_ItemCode = t0.ItemCode
-            WHERE
-                t0.U_SubGrp7 = 'JETA'
-                AND B.U_SelPrice > 0
+            WHERE B.U_SelPrice > 0 and B.U_Brand NOT IN ('ACCESSORIES','ADVERTISEMENT','ALL','SAMPLE','PRINTING & STATIONERY','IMPERIAL COMPUTERS','PACKING MATERIAL','REPAIRS & MAINTENANCE','SALES PROMOTION EXPENSES','EVERYDAY DHOTIE','ALLDAYS DHOTIE','ADD DHOTIE','ADD SHIRT','EVERYDAY SHIRTING','EVERYDAY RDY')
         `;
 
         const { recordset } = await pool.request().query(query);

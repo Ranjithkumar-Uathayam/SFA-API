@@ -65,64 +65,36 @@ async function getProductData(lastSyncDate, offset = 0, limit = 500) {
   return result.recordset;
 }
 
-// async function getPriceListData() {
-//     try {
-//         let pool = await sql.connect(config);
-//         let result = await pool.request().query(`
-//             select t0.ItemCode as ProductCode,
-//             ----PriceList---
-//             B.DocEntry as 'PriceListID',
-//             B.U_Brand as 'SubBrandCode',
-//             t0.ItemCode as 'BPProductName',
-//             B.U_State as 'PriceLisCode',
-//             '' as 'EffectiveFrom',
-//             '' as 'EffectiveTo',
-//             case when B.U_Lock ='Y' then 1 else 0 end  as 'IsActive',
-//             ----------Prices-------------
-//             B.DocEntry as 'PriceListID',
-//             'BPCategory' as 'BPCategory',
-//             B.U_SelPrice   as 'Price',
-//             B.U_MRP    as 'MRP',
-//             case when B.U_Lock ='Y' then 1 else 0 end as 'IsActive'
-//             from [BBLive].[dbo].oitm as t0  WITH(NOLOCK)
-//             LEFT JOIN
-//             (
-//             SELECT T0.DocEntry,T2.U_Brand,T1.U_ItemCode,t0.U_State,t0.U_SelPrice,t0.U_MRP,T2.U_Lock FROM [BBLive].[dbo].[@INS_PLM2] AS T0 WITH(NOLOCK)
-//             INNER JOIN [BBLive].[dbo].[@INS_OPLM] AS T1 WITH(NOLOCK) ON T0.DocEntry=T1.DocEntry 
-//             INNER JOIN [BBLive].[dbo].[@INS_PLM1] AS T2 WITH(NOLOCK) ON T0.DocEntry=T2.DocEntry 
-//             --WHERE T0.DocEntry=56075
-//             )B ON B.U_ItemCode=t0.ItemCode
-
-//             where t0.U_SubGrp7 in ('JETA') AND B.U_SelPrice>0
-//         `);
-//         return result.recordset;
-//     } catch (err) {
-//         console.error('SQL Error (PriceList):', err);
-//         throw err;
-//     }
-// }
 async function getPriceListData() {
     try {
         const pool = await getPool();
 
+        // ─────────────────────────────────────────────────────────────────────────
+        // Each row = one Price entry inside a PriceList for a ProductCode.
+        // The mapper will group:  ProductCode → PriceListID → Prices[]
+        //
+        // T0  = [@INS_PLM2]  — price-list detail lines  (one row per state/BPCategory)
+        // T1  = [@INS_OPLM]  — price-list header (links DocEntry → ItemCode)
+        // T2  = [@INS_PLM1]  — price-list master (Brand, Lock, EffectiveFrom/To …)
+        // ─────────────────────────────────────────────────────────────────────────
         const query = `
             SELECT
-                t0.ItemCode                          AS ProductCode,
+                t0.ItemCode                                     AS ProductCode,
 
-                -- PriceList
-                B.DocEntry                           AS PriceListID,
-                B.U_Brand                            AS SubBrandCode,
-                t0.ItemCode                          AS BPProductName,
-                B.U_State                            AS PriceListCode,
-                NULL                                 AS EffectiveFrom,
-                NULL                                 AS EffectiveTo,
-                CASE WHEN B.U_Lock = 'Y' THEN 0 ELSE 1 END AS PriceListIsActive,
+                -- PriceList header fields
+                B.DocEntry                                      AS PriceListID,
+                B.U_Brand                                       AS SubBrandCode,
+                t0.ItemCode                                     AS BPProductName,
+                B.U_State                                       AS PriceListCode,
+                NULL                                            AS EffectiveFrom,
+                NULL                                       AS EffectiveTo,
+                CASE WHEN B.U_Lock = 'Y' THEN 0 ELSE 1 END     AS PriceListIsActive,
 
-                -- Prices
-                'BPCategory'                         AS BPCategory,
-                B.U_SelPrice                         AS Price,
-                B.U_MRP                              AS MRP,
-                CASE WHEN B.U_Lock = 'Y' THEN 0 ELSE 1 END AS PriceIsActive
+                -- Price line fields
+                'BPCategory'                                  AS BPCategory,
+                B.U_SelPrice                                    AS Price,
+                B.U_MRP                                         AS MRP,
+                CASE WHEN B.U_Lock = 'Y' THEN 0 ELSE 1 END     AS PriceIsActive
 
             FROM [BBLive].[dbo].OITM t0
             LEFT JOIN (
@@ -138,7 +110,14 @@ async function getPriceListData() {
                 INNER JOIN [BBLive].[dbo].[@INS_OPLM] T1 ON T0.DocEntry = T1.DocEntry
                 INNER JOIN [BBLive].[dbo].[@INS_PLM1] T2 ON T0.DocEntry = T2.DocEntry
             ) B ON B.U_ItemCode = t0.ItemCode
-            WHERE B.U_SelPrice > 0 and B.U_Brand NOT IN ('ACCESSORIES','ADVERTISEMENT','ALL','SAMPLE','PRINTING & STATIONERY','IMPERIAL COMPUTERS','PACKING MATERIAL','REPAIRS & MAINTENANCE','SALES PROMOTION EXPENSES','EVERYDAY DHOTIE','ALLDAYS DHOTIE','ADD DHOTIE','ADD SHIRT','EVERYDAY SHIRTING','EVERYDAY RDY')
+            WHERE B.U_SelPrice > 0
+              AND B.U_Brand NOT IN (
+                'ACCESSORIES','ADVERTISEMENT','ALL','SAMPLE',
+                'PRINTING & STATIONERY','IMPERIAL COMPUTERS','PACKING MATERIAL',
+                'REPAIRS & MAINTENANCE','SALES PROMOTION EXPENSES',
+                'EVERYDAY DHOTIE','ALLDAYS DHOTIE','ADD DHOTIE','ADD SHIRT',
+                'EVERYDAY SHIRTING','EVERYDAY RDY'
+              )
         `;
 
         const { recordset } = await pool.request().query(query);

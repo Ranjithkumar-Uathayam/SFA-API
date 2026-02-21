@@ -2,10 +2,6 @@
  * Maps the flat SQL result set to the Salesforce Product Upsert JSON structure.
  * Groups data by ProductCode to create nested arrays for Colors, Attributes, etc.
  */
-/**
- * Map SQL rows into Salesforce ProductUpsertAPI payloads
- * One payload per ProductCode
- */
 
 // Formats a numeric tax value to a 2-decimal-place string e.g. "5.00"
 // Business rule: 12% tax is automatically upgraded to 18%
@@ -48,7 +44,7 @@ function mapToSalesforcePayload(rows) {
           HSNCode: row.HSNCode,
           Brand: row.Brand,
           SalPackUn: row.SalPackUn,
-          DfltWH: null, //row.DfltWH ?? null,
+          DfltWH: null,
           Sku: row.ProductCode,
           Popularity: 0,
           HideItem: 0,
@@ -208,22 +204,95 @@ function mapToSalesforcePayload(rows) {
   return Array.from(map.values());
 }
 
+/**
+ * Maps flat SQL rows into the nested PriceList payload format:
+ *
+ * [
+ *   {
+ *     "ProductCode": "...",
+ *     "PriceList": [
+ *       {
+ *         "PriceListID": 678,
+ *         "SubBrandCode": "...",
+ *         "BPProductName": "...",
+ *         "PriceLisCode": "TN",
+ *         "EffectiveFrom": "...",
+ *         "EffectiveTo": "...",
+ *         "IsActive": 1,
+ *         "Prices": [
+ *           { "PriceListID": 678, "BPCategory": "Showroom", "Price": 2516.0, "MRP": 4240.0, "IsActive": 1 },
+ *           ...
+ *         ]
+ *       }
+ *     ]
+ *   }
+ * ]
+ *
+ * Grouping strategy:
+ *   Level 1 — ProductCode
+ *   Level 2 — PriceListID  (one entry per unique DocEntry / state)
+ *   Level 3 — Prices[]     (one entry per BPCategory row)
+ */
 function mapToPriceListPayload(sqlRows) {
-    if (!sqlRows || sqlRows.length === 0) return [];
+  if (!sqlRows || sqlRows.length === 0) return [];
 
-    return sqlRows.map(row => ({
-        ProductCode: row.ProductCode,
-        PriceListID: row.PriceListID,
-        SubBrandCode: row.SubBrandCode,
-        BPProductName: row.BPProductName,
-        PriceLisCode: row.PriceListCode,
-        EffectiveFrom: row.EffectiveFrom,
-        EffectiveTo: row.EffectiveTo,
-        IsActive: row.PriceListIsActive,
-        BPCategory: row.BPCategory,
-        Price: row.Price,
-        MRP: row.MRP
-    }));
+  // Map<ProductCode, Map<PriceListID, priceListEntry>>
+  const productMap = new Map();
+
+  for (const row of sqlRows) {
+    const productCode  = row.ProductCode;
+    const priceListId  = row.PriceListID;
+
+    // ── Level 1: ProductCode ──────────────────────────────────────────────
+    if (!productMap.has(productCode)) {
+      productMap.set(productCode, new Map());
+    }
+    const priceListMap = productMap.get(productCode);
+
+    // ── Level 2: PriceListID ─────────────────────────────────────────────
+    if (!priceListMap.has(priceListId)) {
+      priceListMap.set(priceListId, {
+        PriceListID   : priceListId,
+        SubBrandCode  : row.SubBrandCode  ?? null,
+        BPProductName : row.BPProductName ?? productCode,
+        PriceLisCode  : row.PriceListCode ?? null,
+        EffectiveFrom : row.EffectiveFrom ?? null,
+        EffectiveTo   : row.EffectiveTo   ?? null,
+        IsActive      : row.PriceListIsActive ?? 1,
+        Prices        : []
+      });
+    }
+
+    // ── Level 3: Price entry (one per BPCategory) ────────────────────────
+    const priceListEntry = priceListMap.get(priceListId);
+
+    // Avoid duplicate BPCategory entries for the same PriceListID
+    const alreadyAdded = priceListEntry.Prices.some(
+      p => p.BPCategory === row.BPCategory
+    );
+
+    if (!alreadyAdded) {
+      priceListEntry.Prices.push({
+        PriceListID : priceListId,
+        BPCategory  : row.BPCategory  ?? null,
+        Price       : row.Price        ?? 0,
+        MRP         : row.MRP          ?? 0,
+        IsActive    : row.PriceIsActive ?? 1
+      });
+    }
+  }
+
+  // ── Flatten to final array ────────────────────────────────────────────
+  const result = [];
+
+  for (const [productCode, priceListMap] of productMap) {
+    result.push({
+      ProductCode : productCode,
+      PriceList   : Array.from(priceListMap.values())
+    });
+  }
+  
+  return result;
 }
 
 function mapToImagePayload(sqlRows) {
@@ -250,12 +319,9 @@ function groupByProduct(rows) {
       };
     }
 
-    // ---------- COLORS ----------
     if (
       row.ColorCode &&
-      !map[row.ProductCode].colors.some(
-        c => c.ColorCode === row.ColorCode
-      )
+      !map[row.ProductCode].colors.some(c => c.ColorCode === row.ColorCode)
     ) {
       map[row.ProductCode].colors.push({
         ColorCode: row.ColorCode,
@@ -269,7 +335,6 @@ function groupByProduct(rows) {
       });
     }
 
-    // ---------- TAXES ----------
     if (row.TaxBelow2500 !== null) {
       map[row.ProductCode].taxes.push({
         TaxPer: formatTax(row.TaxBelow2500),

@@ -20,7 +20,7 @@ async function getProductData(lastSyncDate, offset = 0, limit = 500) {
       t0.ItemCode AS ProductCode,
       t0.ItemName AS ProductName,
       CASE WHEN t0.validFor='Y' THEN 1 ELSE 0 END AS ProductIsActive,
-      t1.ItmsGrpNam AS ProductGroupCode,
+      t0.U_SubGrp7 AS ProductGroupCode,
       t0.U_SubGrp7 AS ShortDesc,
       t0.ItemName AS DetailedDesc,
       t0.U_SubGrp3 AS CategoryName,
@@ -37,9 +37,9 @@ async function getProductData(lastSyncDate, offset = 0, limit = 500) {
       t0.U_SubGrp1 AS Brand,
       t0.SalPackUn AS SalPackUn,
       RTRIM(t0.U_SubGrp6) AS ColorCode,
-      t0.U_SubGrp11 AS ColorName,
-      t0.U_SubGrp11 AS Color,
-      t0.U_SubGrp13 AS Shade,
+      ISNULL(t0.U_SubGrp11,T0.U_SUBGRP6) AS ColorName,
+      ISNULL(t0.U_SubGrp17,T0.U_SubGrp6) AS Color,
+      ISNULL(t0.U_SubGrp13,T0.U_SubGrp6) AS Shade,
       t0.MinLevel AS Min_Qty,
       t0.MaxLevel AS Max_Qty,
       CASE WHEN t0.U_SubGrp13='Core item' THEN 1 ELSE 0 END AS IsCoreColor,
@@ -48,9 +48,9 @@ async function getProductData(lastSyncDate, offset = 0, limit = 500) {
       t0.U_SubGrp1 AS SubBrandCode
     FROM [BBLive].[dbo].oitm t0
     JOIN [BBLive].[dbo].oitb t1 ON t0.ItmsGrpCod = t1.ItmsGrpCod
-    WHERE t0.U_SubGrp7='VUDU' and t0.validFor='Y'
+    WHERE t0.U_SubGrp7='ALPHA' and t0.validFor='Y'
       AND t0.UpdateDate >= @lastSyncDate
-      AND U_SubGrp1 NOT IN ('ACCESSORIES','ADVERTISEMENT','ALL','SAMPLE','PRINTING & STATIONERY','IMPERIAL COMPUTERS','PACKING MATERIAL','REPAIRS & MAINTENANCE','SALES PROMOTION EXPENSES','EVERYDAY DHOTIE','ALLDAYS DHOTIE','ADD DHOTIE','ADD SHIRT','EVERYDAY SHIRTING','EVERYDAY RDY')
+      AND t0.U_SubGrp1 NOT IN ('ACCESSORIES','ADVERTISEMENT','ALL','SAMPLE','PRINTING & STATIONERY','IMPERIAL COMPUTERS','PACKING MATERIAL','REPAIRS & MAINTENANCE','SALES PROMOTION EXPENSES','EVERYDAY DHOTIE','ALLDAYS DHOTIE','ADD DHOTIE','ADD SHIRT','EVERYDAY SHIRTING','EVERYDAY RDY')
     ORDER BY t0.ItemCode
     OFFSET @offset ROWS
     FETCH NEXT @limit ROWS ONLY
@@ -61,7 +61,6 @@ async function getProductData(lastSyncDate, offset = 0, limit = 500) {
     .input('offset', sql.Int, offset)
     .input('limit', sql.Int, limit)
     .query(query);
-    console.log("result.recordset",result.recordset)
   return result.recordset;
 }
 
@@ -91,7 +90,7 @@ async function getPriceListData() {
                 CASE WHEN B.U_Lock = 'Y' THEN 0 ELSE 1 END     AS PriceListIsActive,
 
                 -- Price line fields
-                'BPCategory'                                  AS BPCategory,
+                'Dealer'                                  AS BPCategory,
                 B.U_SelPrice                                    AS Price,
                 B.U_MRP                                         AS MRP,
                 CASE WHEN B.U_Lock = 'Y' THEN 0 ELSE 1 END     AS PriceIsActive
@@ -111,6 +110,7 @@ async function getPriceListData() {
                 INNER JOIN [BBLive].[dbo].[@INS_PLM1] T2 ON T0.DocEntry = T2.DocEntry
             ) B ON B.U_ItemCode = t0.ItemCode
             WHERE B.U_SelPrice > 0
+                AND t0.U_SubGrp7='ALPHA'
               AND B.U_Brand NOT IN (
                 'ACCESSORIES','ADVERTISEMENT','ALL','SAMPLE',
                 'PRINTING & STATIONERY','IMPERIAL COMPUTERS','PACKING MATERIAL',

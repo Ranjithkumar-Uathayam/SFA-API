@@ -291,7 +291,7 @@ function mapToPriceListPayload(sqlRows) {
       PriceList   : Array.from(priceListMap.values())
     });
   }
-  
+
   return result;
 }
 

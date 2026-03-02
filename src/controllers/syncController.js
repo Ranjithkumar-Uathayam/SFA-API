@@ -152,7 +152,7 @@ exports.syncPriceLists = async (req, res) => {
                `${p.PriceList?.reduce((n, pl) => n + (pl.Prices?.length ?? 0), 0) ?? 0} price(s)`)
     );
     
-    const sfResult = await sfService.upsertPriceLists(payload);
+    // const sfResult = await sfService.upsertPriceLists(payload);
 
     divider('PRICELIST SYNC COMPLETE');
     log.ok (`Elapsed          : ${elapsed(startTime)}`);

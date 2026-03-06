@@ -226,8 +226,6 @@ exports.syncImages = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/sync/schemes
-// Fetches all schemes from DB, maps each into the SchemeService payload shape,
-// then fires one POST per scheme to SF_API_URL_Scheme.
 // ─────────────────────────────────────────────────────────────────────────────
 exports.syncSchemes = async (req, res) => {
     const startTime = Date.now();
@@ -251,7 +249,6 @@ exports.syncSchemes = async (req, res) => {
             return res.status(200).json({ message: 'No valid scheme data to sync.' });
         }
 
-        // Log a sample (first 3 schemes)
         payload.slice(0, 3).forEach((s, i) =>
             log.info(
                 `  [${i + 1}] ${s.Policy.PolicyNumber} | ` +
@@ -260,6 +257,7 @@ exports.syncSchemes = async (req, res) => {
                 `BP: ${s.Policy.SC_BpInclution[0]?.BPCode ?? 'n/a'}`
             )
         );
+
         const sfResult = await sfService.upsertSchemes(payload);
 
         divider('SCHEME SYNC COMPLETE');
@@ -288,6 +286,82 @@ exports.syncSchemes = async (req, res) => {
         divider();
         return res.status(500).json({
             message       : 'Scheme Sync Failed',
+            elapsedSeconds: parseFloat(((Date.now() - startTime) / 1000).toFixed(2)),
+            error         : err.message,
+            details       : err.response?.data ?? null
+        });
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/sync/businesspartners
+//
+// Flow:
+//   1. Run BP Master query (once per sub-brand/division combo) via dbService
+//   2. Map rows → { businessPartners: [...] } via mapper
+//   3. Send to SF BusinessPartnerUpsertAPI in batches via sfService
+// ─────────────────────────────────────────────────────────────────────────────
+exports.syncBusinessPartners = async (req, res) => {
+    const startTime = Date.now();
+    divider('BP SYNC START');
+
+    try {
+        log.info('Fetching BP master data from DB…');
+        const sqlData = await dbService.getBPMasterData();
+        log.info(`Fetched ${sqlData.length} raw DB row(s) across all sub-brand passes`);
+
+        if (!sqlData.length) {
+            log.warn('No BP data found in DB.');
+            return res.status(200).json({ message: 'No BP data found.' });
+        }
+
+        const payload = mapper.mapToBPPayload(sqlData);
+        const totalBPs = payload.businessPartners.length;
+        log.info(`Mapped to ${totalBPs} unique business partner(s)`);
+
+        if (totalBPs === 0) {
+            log.warn('Mapper produced 0 BPs — nothing to sync.');
+            return res.status(200).json({ message: 'No valid BP data to sync.' });
+        }
+
+        // Log a sample of the first 3 BPs
+        payload.businessPartners.slice(0, 3).forEach((bp, i) =>
+            log.info(
+                `  [${i + 1}] ${bp.BPCode} | ${bp.BPName} | ` +
+                `Category: ${bp.BPCategory} | ` +
+                `Addresses: ${bp.BillShipTo.length} | ` +
+                `SubBrands: ${bp.MST_Map_BP_SubBrand.length}`
+            )
+        ); 
+        console.log("*******", payload)
+        const sfResult = {} //await sfService.upsertBusinessPartners(payload);
+
+        divider('BP SYNC COMPLETE');
+        log.ok (`Elapsed          : ${elapsed(startTime)}`);
+        log.info(`DB rows fetched  : ${sqlData.length}`);
+        log.info(`BPs mapped       : ${totalBPs}`);
+        log.ok  (`SF success       : ${sfResult.successRecords}`);
+        if (sfResult.failedRecords > 0) {
+            log.error(`SF failed        : ${sfResult.failedRecords}`);
+        }
+        divider();
+
+        return res.status(200).json({
+            message       : sfResult.failedBatches === 0
+                ? 'Business Partner Sync Completed Successfully'
+                : 'Business Partner Sync Completed with some batch failures',
+            elapsedSeconds: parseFloat(((Date.now() - startTime) / 1000).toFixed(2)),
+            dbRowsFetched : sqlData.length,
+            bpsMapped     : totalBPs,
+            ...sfResult
+        });
+
+    } catch (err) {
+        divider('BP SYNC ERROR');
+        log.error(`Sync failed after ${elapsed(startTime)}: ${err.message}`);
+        divider();
+        return res.status(500).json({
+            message       : 'Business Partner Sync Failed',
             elapsedSeconds: parseFloat(((Date.now() - startTime) / 1000).toFixed(2)),
             error         : err.message,
             details       : err.response?.data ?? null

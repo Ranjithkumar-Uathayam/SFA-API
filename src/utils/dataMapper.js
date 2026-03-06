@@ -178,11 +178,6 @@ function mapToSalesforcePayload(rows) {
 
 /**
  * Maps flat SQL rows into the nested PriceList payload format.
- *
- * Grouping strategy:
- *   Level 1 — ProductCode
- *   Level 2 — PriceListID  (one entry per unique DocEntry / state)
- *   Level 3 — Prices[]     (one entry per BPCategory row)
  */
 function mapToPriceListPayload(sqlRows) {
     if (!sqlRows || sqlRows.length === 0) return [];
@@ -243,7 +238,6 @@ function mapToImagePayload(sqlRows) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INDIA STATE CODE → FULL NAME LOOKUP
-// Keys are the short codes stored in OCRD.U_SalPriceCode
 // ─────────────────────────────────────────────────────────────────────────────
 const INDIA_STATE_NAMES = {
     'AN': 'Andaman and Nicobar Islands',
@@ -292,40 +286,11 @@ function resolveStateName(code) {
 }
 
 /**
- * mapToSchemePayload
- *
- * Converts flat DB rows (one per scheme line) into the nested Salesforce
- * Scheme/Policy payload format.
- *
- * Output structure per policy:
- * {
- *   Policy: {
- *     PolicyNumber, Revision, PolicyID, PolicyName, SavingType,
- *     DiscountBasis, Applicability, IsCustomerDefined, IsActive,
- *     DivisionCode, FromDate, ToDate, AllowDiscountForAllProducts,
- *     DiscountPer,
- *     SC_BpCategoryMapping : [{ BPCategory }],
- *     StateMapping         : [{ StateCode }],
- *     RoleMapping          : [{ Role }],
- *     SC_BpExclution       : [{ BPCode: null }],
- *     SC_BpInclution       : [{ BPCode }],
- *     SC_ProductMapping    : [{ ProductCode, SizeCode, ColorCode,
- *                               MinOrderQty, FreeQty, Applicability,
- *                               AllowMultiplyFreeQty, MaxAllowedFreeQty,
- *                               IsActive, MappingStatus }],
- *     SC_ProdGroupMapping  : [{ GroupCode: null, ... }],
- *     SC_ProdAlternate     : [{ ProductCode: null, ... }],
- *     SC_ProdGroupAlternate: [{ GroupName: null, ... }],
- *     SC_Brand_Discount    : [{ Brand: null, ... }],
- *     SC_ProdGroupDirectDiscount: [...],
- *     SC_ProductDirectDiscount  : [...]
- *   }
- * }
+ * mapToSchemePayload — converts flat DB rows into nested Salesforce Scheme/Policy payload.
  */
 function mapToSchemePayload(rows) {
     if (!rows || rows.length === 0) return [];
 
-    // Group by PolicyID (T0.DocEntry)
     const policyMap = new Map();
 
     for (const row of rows) {
@@ -348,70 +313,32 @@ function mapToSchemePayload(rows) {
                     ToDate                      : row.ToDate,
                     AllowDiscountForAllProducts : row.AllowDiscountForAllProducts,
                     DiscountPer                 : row.DiscountPer,
-
-                    // Fixed/static nested arrays (same for every line of this policy)
                     SC_BpCategoryMapping        : [{ BPCategory: 'DEALER' }],
-                    StateMapping        : [{ StateCode : resolveStateName(row.StateCode) }],
+                    StateMapping                : [{ StateCode: resolveStateName(row.StateCode) }],
                     RoleMapping                 : [{ Role: 'RBM' }],
                     SC_BpExclution              : [{ BPCode: null }],
                     SC_BpInclution              : [{ BPCode: row.BPCode ?? null }],
-
-                    // Product lines — accumulated below
                     SC_ProductMapping           : [],
-
-                    // Static empty/null arrays (Salesforce expects these keys)
                     SC_ProdGroupMapping: [{
-                        GroupCode           : null,
-                        StyleCode           : null,
-                        MinOrderQty         : null,
-                        FreeQty             : null,
-                        Applicability       : null,
-                        AllowMultiplyFreeQty: 0,
-                        MaxAllowedFreeQty   : null,
-                        GroupName           : null,
-                        IsActive            : 0,
-                        MappingStatus       : 0
+                        GroupCode: null, StyleCode: null, MinOrderQty: null,
+                        FreeQty: null, Applicability: null, AllowMultiplyFreeQty: 0,
+                        MaxAllowedFreeQty: null, GroupName: null, IsActive: 0, MappingStatus: 0
                     }],
-                    SC_ProdAlternate: [{
-                        ProductCode: null,
-                        SizeCode   : null,
-                        ColorCode  : null,
-                        IsActive   : 0
-                    }],
-                    SC_ProdGroupAlternate: [{
-                        GroupName : null,
-                        StyleCode : null,
-                        IsActive  : 0
-                    }],
-                    SC_Brand_Discount: [{
-                        Brand       : null,
-                        DiscountType: null,
-                        DiscountVal : null,
-                        IsActive    : 0
-                    }],
+                    SC_ProdAlternate: [{ ProductCode: null, SizeCode: null, ColorCode: null, IsActive: 0 }],
+                    SC_ProdGroupAlternate: [{ GroupName: null, StyleCode: null, IsActive: 0 }],
+                    SC_Brand_Discount: [{ Brand: null, DiscountType: null, DiscountVal: null, IsActive: 0 }],
                     SC_ProdGroupDirectDiscount: [{
-                        DivisionCode: null,
-                        GroupCode   : null,
-                        GroupName   : null,
-                        StyleCode   : null,
-                        StyleName   : null,
-                        DiscountType: null,
-                        DiscountVal : null,
-                        IsActive    : 0
+                        DivisionCode: null, GroupCode: null, GroupName: null, StyleCode: null,
+                        StyleName: null, DiscountType: null, DiscountVal: null, IsActive: 0
                     }],
                     SC_ProductDirectDiscount: [{
-                        ProductCode : null,
-                        SizeCode    : null,
-                        ColorCode   : null,
-                        DiscountType: null,
-                        DiscountVal : null,
-                        IsActive    : 0
+                        ProductCode: null, SizeCode: null, ColorCode: null,
+                        DiscountType: null, DiscountVal: null, IsActive: 0
                     }]
                 }
             });
         }
 
-        // Accumulate product lines for this policy
         const policy = policyMap.get(policyId).Policy;
 
         if (row.ProductCode) {
@@ -420,7 +347,6 @@ function mapToSchemePayload(rows) {
                      p.SizeCode    === row.SizeCode    &&
                      p.ColorCode   === row.ColorCode
             );
-
             if (!alreadyAdded) {
                 policy.SC_ProductMapping.push({
                     ProductCode         : row.ProductCode,
@@ -439,6 +365,124 @@ function mapToSchemePayload(rows) {
     }
 
     return Array.from(policyMap.values());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BP MASTER MAPPER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Safely parse a FOR JSON PATH result (string, object, or null) into an array.
+ */
+function safeParse(val) {
+    if (val == null) return [];
+    if (typeof val === 'object') return Array.isArray(val) ? val : [val];
+    try { return JSON.parse(val); } catch { return []; }
+}
+
+/**
+ * mapToBPPayload
+ *
+ * Converts flat DB rows (one per CardCode × SubBrand/Division) into the nested
+ * Salesforce BusinessPartnerUpsertAPI payload format.
+ *
+ * Output structure:
+ * {
+ *   businessPartners: [
+ *     {
+ *       BPCode, BPName, DefaultCurrency, IsActive, AllowCreditLimit,
+ *       DisplayName, BPCategory, BPGroupCode, SR_BPCode, GradeOfBP,
+ *       CustomerRemark, Latitude, Longitude, AreaCode,
+ *       BillShipTo          : [...],
+ *       BPContactDetails    : [...],
+ *       Discount_BP_Division: [...],
+ *       MST_MAP_BP_Division : [...],
+ *       MST_MAP_BP_Brand    : [...],
+ *       MST_Map_BP_SubBrand : [...]
+ *     }
+ *   ]
+ * }
+ */
+function mapToBPPayload(rows) {
+    if (!rows || rows.length === 0) return { businessPartners: [] };
+
+    const bpMap = new Map();
+
+    for (const row of rows) {
+        const bpCode = row.BPCode;
+
+        if (!bpMap.has(bpCode)) {
+            bpMap.set(bpCode, {
+                BPCode          : row.BPCode,
+                BPName          : row.BPName,
+                DefaultCurrency : row.DefaultCurrency,
+                IsActive        : row.IsActive,
+                AllowCreditLimit: row.AllowCreditLimit ?? 0,
+                DisplayName     : row.DisplayName,
+                BPCategory      : row.BPCategory      ?? '',
+                BPGroupCode     : row.BPGroupCode     ?? '',
+                SR_BPCode       : row.SR_BPCode       ?? '',
+                GradeOfBP       : row.GradeOfBP       ?? '',
+                CustomerRemark  : row.CustomerRemark   ?? '',
+                Latitude        : row.Latitude         ?? 0,
+                Longitude       : row.Longitude        ?? 0,
+                AreaCode        : row.AreaCode         ?? '',
+
+                BillShipTo           : [],
+                BPContactDetails     : [],
+                Discount_BP_Division : [],
+                MST_MAP_BP_Division  : [],
+                MST_MAP_BP_Brand     : [],
+                MST_Map_BP_SubBrand  : []
+            });
+        }
+
+        const bp = bpMap.get(bpCode);
+
+        // BillShipTo — deduplicate by BillShipID + Type
+        for (const entry of safeParse(row.BillShipTo)) {
+            if (!bp.BillShipTo.some(b => b.BillShipID === entry.BillShipID && b.Type === entry.Type)) {
+                bp.BillShipTo.push(entry);
+            }
+        }
+
+        // BPContactDetails — deduplicate by ContactPersonID + DivisionCode
+        for (const c of safeParse(row.BPContactDetails)) {
+            if (!bp.BPContactDetails.some(x => x.ContactPersonID === c.ContactPersonID && x.DivisionCode === c.DivisionCode)) {
+                bp.BPContactDetails.push(c);
+            }
+        }
+
+        // Discount_BP_Division — deduplicate by DivisionCode + DiscountName
+        for (const d of safeParse(row.Discount_BP_Division)) {
+            if (!bp.Discount_BP_Division.some(x => x.DivisionCode === d.DivisionCode && x.DiscountName === d.DiscountName)) {
+                bp.Discount_BP_Division.push(d);
+            }
+        }
+
+        // MST_MAP_BP_Division — deduplicate by DivisionCode
+        for (const d of safeParse(row.MST_MAP_BP_Division)) {
+            if (!bp.MST_MAP_BP_Division.some(x => x.DivisionCode === d.DivisionCode)) {
+                bp.MST_MAP_BP_Division.push(d);
+            }
+        }
+
+        // MST_MAP_BP_Brand — deduplicate by Brand + DivisionCode
+        for (const b of safeParse(row.MST_MAP_BP_Brand)) {
+            if (!bp.MST_MAP_BP_Brand.some(x => x.Brand === b.Brand && x.DivisionCode === b.DivisionCode)) {
+                bp.MST_MAP_BP_Brand.push(b);
+            }
+        }
+
+        // MST_Map_BP_SubBrand — deduplicate by SubBrandName + DivisionCode
+        for (const s of safeParse(row.MST_Map_BP_SubBrand)) {
+            if (!bp.MST_Map_BP_SubBrand.some(x => x.SubBrandName === s.SubBrandName && x.DivisionCode === s.DivisionCode)) {
+                bp.MST_Map_BP_SubBrand.push(s);
+            }
+        }
+    }
+
+    return { businessPartners: Array.from(bpMap.values()) };
 }
 
 // ── Legacy helpers (kept for backward compat) ────────────────────────────────
@@ -485,7 +529,8 @@ module.exports = {
     mapToSalesforcePayload,
     mapToPriceListPayload,
     mapToImagePayload,
-    mapToSchemePayload,     // ← new
+    mapToSchemePayload,
+    mapToBPPayload,         // ← NEW
     groupByProduct,
     buildPayload
 };

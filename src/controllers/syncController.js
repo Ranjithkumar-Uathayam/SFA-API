@@ -316,6 +316,7 @@ exports.syncBusinessPartners = async (req, res) => {
         }
 
         const payload = mapper.mapToBPPayload(sqlData);
+
         const totalBPs = payload.businessPartners.length;
         log.info(`Mapped to ${totalBPs} unique business partner(s)`);
 
@@ -333,8 +334,8 @@ exports.syncBusinessPartners = async (req, res) => {
                 `SubBrands: ${bp.MST_Map_BP_SubBrand.length}`
             )
         ); 
-        console.log("*******", payload)
-        const sfResult = {} //await sfService.upsertBusinessPartners(payload);
+        console.log("*******", JSON.stringify(payload))
+        //const sfResult = await sfService.upsertBusinessPartners(payload);
 
         divider('BP SYNC COMPLETE');
         log.ok (`Elapsed          : ${elapsed(startTime)}`);

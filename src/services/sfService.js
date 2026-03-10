@@ -522,7 +522,7 @@ async function upsertBusinessPartners(payload) {
     for (let i = 0; i < total; i += BATCH_SIZE) {
         batches.push(businessPartners.slice(i, i + BATCH_SIZE));
     }
-    console.log("*&^%$***********batches",batches[0])
+    console.log("*&^%$***********batches",JSON.stringify(batches[0]))
     const tasks = batches.map((batch, batchIdx) => async () => {
         const batchNum    = batchIdx + 1;
         const recordRange = `BPs ${batchIdx * BATCH_SIZE + 1}–${Math.min((batchIdx + 1) * BATCH_SIZE, total)}`;

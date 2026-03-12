@@ -297,9 +297,9 @@ exports.syncSchemes = async (req, res) => {
 // POST /api/sync/businesspartners
 //
 // Flow:
-//   1. Run BP Master query (once per sub-brand/division combo) via dbService
+//   1. Run BP Master query via dbService
 //   2. Map rows → { businessPartners: [...] } via mapper
-//   3. Send to SF BusinessPartnerUpsertAPI in batches via sfService
+//   3. Send to SF one BP at a time (SF limit: max 1 BP per request)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.syncBusinessPartners = async (req, res) => {
     const startTime = Date.now();
@@ -315,8 +315,7 @@ exports.syncBusinessPartners = async (req, res) => {
             return res.status(200).json({ message: 'No BP data found.' });
         }
 
-        const payload = mapper.mapToBPPayload(sqlData);
-
+        const payload  = mapper.mapToBPPayload(sqlData);
         const totalBPs = payload.businessPartners.length;
         log.info(`Mapped to ${totalBPs} unique business partner(s)`);
 
@@ -333,7 +332,8 @@ exports.syncBusinessPartners = async (req, res) => {
                 `Addresses: ${bp.BillShipTo.length} | ` +
                 `SubBrands: ${bp.MST_Map_BP_SubBrand.length}`
             )
-        ); 
+        );
+
         const sfResult = await sfService.upsertBusinessPartners(payload);
 
         divider('BP SYNC COMPLETE');
@@ -347,9 +347,9 @@ exports.syncBusinessPartners = async (req, res) => {
         divider();
 
         return res.status(200).json({
-            message       : sfResult.failedBatches === 0
+            message       : sfResult.failedRecords === 0
                 ? 'Business Partner Sync Completed Successfully'
-                : 'Business Partner Sync Completed with some batch failures',
+                : 'Business Partner Sync Completed with some failures',
             elapsedSeconds: parseFloat(((Date.now() - startTime) / 1000).toFixed(2)),
             dbRowsFetched : sqlData.length,
             bpsMapped     : totalBPs,

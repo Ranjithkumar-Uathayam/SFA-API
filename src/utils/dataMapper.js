@@ -191,7 +191,7 @@ const INDIA_STATE_NAMES = {
     'JH':'Jharkhand','KA':'Karnataka','KL':'Kerala','LA':'Ladakh','LD':'Lakshadweep',
     'MP':'Madhya Pradesh','MH':'Maharashtra','MN':'Manipur','ML':'Meghalaya',
     'MZ':'Mizoram','NL':'Nagaland','OD':'Odisha','OR':'Odisha','PY':'Puducherry',
-    'PB':'Punjab','RJ':'Rajasthan','SK':'Sikkim','TN':'TamilNadu','TS':'Telangana',
+    'PB':'Punjab','RJ':'Rajasthan','SK':'Sikkim','TN':'Tamil Nadu','TS':'Telangana',
     'TR':'Tripura','UP':'UttarPradesh','UK':'Uttarakhand','UT':'Uttarakhand','WB':'WestBengal'
 };
 

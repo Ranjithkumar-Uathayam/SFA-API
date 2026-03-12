@@ -256,13 +256,13 @@ async function getBPMasterData() {
                                         AS DisplayName,
                         CASE WHEN T1.AdresType = 'B' THEN 'OFFICE' ELSE 'SHIP' END
                                         AS LocationName,
-                        ISNULL(T1.Building,   '')  AS Line1,
-                        ISNULL(T1.Block,      '')  AS Line2,
-                        ISNULL(T1.Street, T1.City) AS Line3,
+                        ISNULL(NULLIF(CAST(T1.Building AS NVARCHAR(MAX)),''), T1.City) AS Line1,
+						ISNULL(NULLIF(CAST(T1.Block AS NVARCHAR(MAX)),''), T1.City)    AS Line2,
+						ISNULL(NULLIF(CAST(T1.Street AS NVARCHAR(MAX)),''), T1.City)   AS Line3,
                         CASE WHEN (SELECT ShipToDef FROM [BBLive].[dbo].OCRD WHERE CardCode = T1.CardCode) = T1.Address
                              THEN 1 ELSE 0 END     AS IsDefault,
                         ISNULL(T1.City,       '')  AS City,
-                        ISNULL(T1.County,     '')  AS County,
+                        ISNULL(NULLIF(CAST(T1.County AS NVARCHAR(MAX)),''), T1.Country) AS County,
                         ISNULL(T1.State,      '')  AS [State],
                         ISNULL(T1.Country,    '')  AS Country,
                         ISNULL(T1.ZipCode,    '')  AS ZipCode,
@@ -390,6 +390,7 @@ async function getBPMasterData() {
 
             WHERE T0.CardType = 'C'
             AND T0.validFor  = 'Y'
+            AND T0.U_AreaCode != ''
             ORDER BY T0.CardCode, SB.DivisionCode, SB.SubBrandName;
         `;
 

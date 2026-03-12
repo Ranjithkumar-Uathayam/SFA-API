@@ -468,16 +468,14 @@ async function upsertSchemes(schemes) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BUSINESS PARTNERS  — batched bulk upload
+// BUSINESS PARTNERS
+//
+// SF endpoint enforces a hard limit of MAX 1 BP per request.
+// We send one BP at a time, wrapped in { businessPartners: [bp] },
+// running up to CONCURRENCY requests in parallel.
 //
 // Endpoint: SF_API_URL_BusinessPartner
-//   (or auto-derived from SF_API_URL_ProductMaster by replacing the last path
-//    segment with 'BusinessPartnerUpsertAPI')
-//
-// The Salesforce endpoint expects:
-//   { "businessPartners": [ ...BP objects... ] }
-//
-// We send in batches of BATCH_SIZE to stay within SF governor limits.
+//   (or auto-derived from SF_API_URL_ProductMaster)
 // ─────────────────────────────────────────────────────────────────────────────
 async function upsertBusinessPartners(payload) {
     const businessPartners = payload?.businessPartners ?? payload;
@@ -495,7 +493,6 @@ async function upsertBusinessPartners(payload) {
         url = process.env.SF_API_URL_ProductMaster.replace('ProductUpsertAPI', 'BusinessPartnerUpsertAPI');
         log.info(`Derived BP URL: ${url}`);
     }
-    // Override host from live instance URL (post-auth redirect)
     url = buildSalesforceUrl(url, instanceUrl);
 
     if (!url) throw new Error('SF_API_URL_BusinessPartner is not set in .env');
@@ -505,85 +502,70 @@ async function upsertBusinessPartners(payload) {
         Authorization : `Bearer ${token}`
     };
 
-    const total      = businessPartners.length;
-    const totalBatch = Math.ceil(total / BATCH_SIZE);
-    const summary    = { success: [], failed: [] };
+    const total   = businessPartners.length;
+    const summary = { success: [], failed: [] };
 
     log.divider('BP UPSERT START');
-    log.info(`Total BPs     : ${total}`);
-    log.info(`Batch size    : ${BATCH_SIZE}`);
-    log.info(`Total batches : ${totalBatch}`);
-    log.info(`Concurrency   : ${CONCURRENCY}`);
-    log.info(`Endpoint      : ${url}`);
+    log.info(`Total BPs        : ${total}`);
+    log.info(`Concurrency      : ${CONCURRENCY}`);
+    log.info(`Max retries/item : ${MAX_RETRIES}`);
+    log.info(`Endpoint         : ${url}`);
+    log.info(`Mode             : 1 BP per request (SF limit)`);
     log.divider();
 
-    // Split into batches
-    const batches = [];
-    for (let i = 0; i < total; i += BATCH_SIZE) {
-        batches.push(businessPartners.slice(i, i + BATCH_SIZE));
-    }
-    
-    const tasks = batches.map((batch, batchIdx) => async () => {
-        const batchNum    = batchIdx + 1;
-        const recordRange = `BPs ${batchIdx * BATCH_SIZE + 1}–${Math.min((batchIdx + 1) * BATCH_SIZE, total)}`;
-        log.info(`Batch ${batchNum}/${totalBatch} — sending ${batch.length} BPs (${recordRange})`);
+    // SF only accepts exactly 1 BP per request — mirrors upsertProducts pattern
+    const tasks = businessPartners.map((bp, idx) => async () => {
+        const code = bp.BPCode ?? `IDX-${idx}`;
 
-        // Wrap in the expected envelope for this batch
-        const body = { businessPartners: batch };
-
+        // Always wrap a single BP in the expected envelope
+        const body = { businessPartners: [bp] };
+        console.log("****************************",JSON.stringify(body))
         try {
             const response = await withRetry(
                 () => axios.post(url, body, { headers, timeout: REQ_TIMEOUT }),
-                `BP-BATCH-${batchNum}`
+                code
             );
-            verifySFResponse(response, `BP-BATCH-${batchNum}`);
-            summary.success.push({
-                batch : batchNum,
-                count : batch.length,
-                status: response.status,
-                data  : response.data
-            });
-            log.ok(`Batch ${batchNum}/${totalBatch} — HTTP ${response.status} — ${batch.length} BPs OK`);
+            verifySFResponse(response, code);
+            summary.success.push({ code, status: response.status, data: response.data });
+
+            const done = summary.success.length + summary.failed.length;
+            log.ok(`[${done}/${total}] [${code}] HTTP ${response.status} — OK`);
 
         } catch (err) {
-            const status = err.response?.status ?? 'N/A';
-            const body   = err.response?.data   ?? err.message;
-            const codes  = batch.map(r => r.BPCode ?? 'UNKNOWN');
-            summary.failed.push({ batch: batchNum, count: batch.length, status, error: body, codes });
-            log.error(`Batch ${batchNum}/${totalBatch} — HTTP ${status} — FAILED`);
-            log.error(`  Codes  : ${codes.slice(0, 10).join(', ')}${codes.length > 10 ? '…' : ''}`);
-            log.error(`  Detail : ${JSON.stringify(body)}`);
+            const status  = err.response?.status ?? 'N/A';
+            const errBody = err.response?.data   ?? err.message;
+            summary.failed.push({ code, status, error: errBody });
+
+            const done = summary.success.length + summary.failed.length;
+            log.error(`[${done}/${total}] [${code}] HTTP ${status} — FAILED`);
+            log.error(`  Detail: ${JSON.stringify(errBody)}`);
         }
 
-        log.progress(summary.success.length + summary.failed.length, totalBatch, 'BP batches');
+        const done = summary.success.length + summary.failed.length;
+        if (done % 10 === 0 || done === total) log.progress(done, total, 'BPs');
     });
 
     await runWithConcurrency(tasks, CONCURRENCY);
 
-    const successRecords = summary.success.reduce((n, b) => n + b.count, 0);
-    const failedRecords  = summary.failed.reduce ((n, b) => n + b.count, 0);
-
     log.divider('BP UPSERT SUMMARY');
-    log.ok  (`Batches OK     : ${summary.success.length}  (${successRecords} BPs)`);
+    log.info(`Total Sent : ${total}`);
+    log.ok  (`Success    : ${summary.success.length}`);
     if (summary.failed.length > 0) {
-        log.error(`Batches FAILED : ${summary.failed.length}  (${failedRecords} BPs)`);
+        log.error(`Failed     : ${summary.failed.length}`);
         summary.failed.forEach(f =>
-            log.warn(`  • Batch ${f.batch} — HTTP ${f.status} — ${JSON.stringify(f.error)}`)
+            log.warn(`  • [${f.code}] HTTP ${f.status} — ${JSON.stringify(f.error)}`)
         );
     }
     log.divider();
 
-    if (summary.success.length === 0) {
-        throw new Error(`All ${totalBatch} BP batches failed.`);
+    if (summary.success.length === 0 && summary.failed.length > 0) {
+        throw new Error(`All ${summary.failed.length} BP upsert(s) failed.`);
     }
 
     return {
         totalBPs      : total,
-        totalBatches  : totalBatch,
-        successBatches: summary.success.length,
-        failedBatches : summary.failed.length,
-        successRecords,
-        failedRecords,
+        successRecords: summary.success.length,
+        failedRecords : summary.failed.length,
         failedDetails : summary.failed
     };
 }
@@ -593,5 +575,5 @@ module.exports = {
     upsertPriceLists,
     uploadImages,
     upsertSchemes,
-    upsertBusinessPartners   // ← NEW
+    upsertBusinessPartners
 };

@@ -334,8 +334,7 @@ exports.syncBusinessPartners = async (req, res) => {
                 `SubBrands: ${bp.MST_Map_BP_SubBrand.length}`
             )
         ); 
-        console.log("*******", JSON.stringify(payload))
-        //const sfResult = await sfService.upsertBusinessPartners(payload);
+        const sfResult = await sfService.upsertBusinessPartners(payload);
 
         divider('BP SYNC COMPLETE');
         log.ok (`Elapsed          : ${elapsed(startTime)}`);

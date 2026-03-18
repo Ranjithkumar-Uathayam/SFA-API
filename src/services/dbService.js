@@ -47,7 +47,7 @@ async function getProductData(lastSyncDate, offset = 0, limit = 500) {
             t0.U_SubGrp1 AS SubBrandCode
         FROM [BBLive].[dbo].oitm t0
         JOIN [BBLive].[dbo].oitb t1 ON t0.ItmsGrpCod = t1.ItmsGrpCod
-        WHERE t0.U_SubGrp7='ALPHA' AND t0.validFor='Y'
+        WHERE t0.validFor='Y'
             AND t0.UpdateDate >= @lastSyncDate
             AND t0.U_SubGrp1 NOT IN (
                 'ACCESSORIES','ADVERTISEMENT','ALL','SAMPLE','PRINTING & STATIONERY',
@@ -86,18 +86,18 @@ async function getPriceListData() {
                 'Dealer'                                        AS BPCategory,
                 B.U_SelPrice                                    AS Price,
                 B.U_MRP                                         AS MRP,
+                B.LineId										AS PriceID,
                 CASE WHEN B.U_Lock = 'Y' THEN 0 ELSE 1 END     AS PriceIsActive
             FROM [BBLive].[dbo].OITM t0
             LEFT JOIN (
                 SELECT
                     T0.DocEntry, T2.U_Brand, T1.U_ItemCode,
-                    T0.U_State, T0.U_SelPrice, T0.U_MRP, T2.U_Lock
+                    T0.U_State, T0.U_SelPrice, T0.U_MRP, T2.U_Lock, T0.LineId
                 FROM [BBLive].[dbo].[@INS_PLM2] T0
                 INNER JOIN [BBLive].[dbo].[@INS_OPLM] T1 ON T0.DocEntry = T1.DocEntry
                 INNER JOIN [BBLive].[dbo].[@INS_PLM1] T2 ON T0.DocEntry = T2.DocEntry
             ) B ON B.U_ItemCode = t0.ItemCode
             WHERE B.U_SelPrice > 0
-                AND t0.U_SubGrp7 = 'ALPHA'
                 AND B.U_Brand NOT IN (
                     'ACCESSORIES','ADVERTISEMENT','ALL','SAMPLE',
                     'PRINTING & STATIONERY','IMPERIAL COMPUTERS','PACKING MATERIAL',
@@ -214,85 +214,89 @@ async function getBPMasterData() {
                 CASE WHEN T0.GroupCode IN ('100','106') THEN 'Dealer' ELSE '' END AS BPCategory,
                 ''            AS BPGroupCode,
                 T0.U_showcode AS SR_BPCode,
-                REPLACE(T0.U_Grade,'Grade ','') AS GradeOfBP,
+                CASE 
+                    WHEN ISNULL(T0.U_Grade, '') = '' 
+                        OR T0.U_Grade = '-' 
+                    THEN 'C'
+                    ELSE REPLACE(T0.U_Grade, 'Grade', '')
+                END AS GradeOfBP,
                 ''            AS CustomerRemark,
                 0             AS Latitude,
                 0             AS Longitude,
                 T0.U_AreaCode AS AreaCode,
-
-                -- ── Division & SubBrand (cross-joined) ─────────────────────────────────
+            
+                -- ── Division & SubBrand (cross-joined) ────────────────────────────────────
                 SB.DivisionCode AS DivisionCode,
                 SB.Brand        AS Brand,
                 SB.SubBrandName AS SubBrandName,
-
-                -- ── Discount per sub-brand ─────────────────────────────────────────────
+            
+                -- ── Discount per sub-brand (flat column) ──────────────────────────────────
                 CASE SB.SubBrandName
                     WHEN 'UATHAYAM DHOTIE'      THEN ISNULL(T0.U_Dis1,  0)
-                    WHEN 'UATHAYAM SHIRTING'     THEN ISNULL(T0.U_Dis1,  0)
-                    WHEN 'UATHAYAM RDY'          THEN ISNULL(T0.U_Dis2,  0)
-                    WHEN 'ADD SHIRT'             THEN ISNULL(T0.U_Dis2,  0)
-                    WHEN 'UATHAYAM RDY DHOTIE'   THEN ISNULL(T0.U_Dis8,  0)
-                    WHEN 'UATHAYAM HOS'          THEN ISNULL(T0.U_Dis3,  0)
-                    WHEN 'EVERYDAY DHOTIE'       THEN ISNULL(T0.U_Dis4,  0)
-                    WHEN 'EVERYDAY SHIRTING'     THEN ISNULL(T0.U_Dis4,  0)
-                    WHEN 'EVERYDAY RDY'          THEN ISNULL(T0.U_Dis5,  0)
-                    WHEN 'ADD DHOTIE'            THEN ISNULL(T0.U_Dis6,  0)
-                    WHEN 'ADD SHIRTING'          THEN ISNULL(T0.U_Dis6,  0)
-                    WHEN 'UATHAYAM KIDS SET'     THEN ISNULL(T0.U_Dis9,  0)
-                    WHEN 'ARISER SHIRT'          THEN ISNULL(T0.U_Dis7,  0)
-                    WHEN 'UATHAYAM MENS SET'     THEN ISNULL(T0.U_Dis11, 0)
-                    WHEN 'ARISER MENS TROUSERS'  THEN ISNULL(T0.U_Dis10, 0)
+                    WHEN 'UATHAYAM SHIRTING'    THEN ISNULL(T0.U_Dis1,  0)
+                    WHEN 'UATHAYAM RDY'         THEN ISNULL(T0.U_Dis2,  0)
+                    WHEN 'ADD SHIRT'            THEN ISNULL(T0.U_Dis2,  0)
+                    WHEN 'UATHAYAM RDY DHOTIE'  THEN ISNULL(T0.U_Dis8,  0)
+                    WHEN 'UATHAYAM HOS'         THEN ISNULL(T0.U_Dis3,  0)
+                    WHEN 'EVERYDAY DHOTIE'      THEN ISNULL(T0.U_Dis4,  0)
+                    WHEN 'EVERYDAY SHIRTING'    THEN ISNULL(T0.U_Dis4,  0)
+                    WHEN 'EVERYDAY RDY'         THEN ISNULL(T0.U_Dis5,  0)
+                    WHEN 'ADD DHOTIE'           THEN ISNULL(T0.U_Dis6,  0)
+                    WHEN 'ADD SHIRTING'         THEN ISNULL(T0.U_Dis6,  0)
+                    WHEN 'UATHAYAM KIDS SET'    THEN ISNULL(T0.U_Dis9,  0)
+                    WHEN 'ARISER SHIRT'         THEN ISNULL(T0.U_Dis7,  0)
+                    WHEN 'UATHAYAM MENS SET'    THEN ISNULL(T0.U_Dis11, 0)
+                    WHEN 'ARISER MENS TROUSERS' THEN ISNULL(T0.U_Dis10, 0)
                     ELSE 0
                 END AS DiscountPer,
-
-                -- ── BillShipTo (FOR JSON) ──────────────────────────────────────────────
-                -- BillShipID = T1.LineNum (integer), PhoneNumber = T1.Tel1
-                -- T0 refs use scalar subqueries to avoid CROSS JOIN binding error
+            
+                -- ── BillShipTo (FOR JSON) ─────────────────────────────────────────────────
                 (
                     SELECT
-                        (T1.LineNum+1000)      AS BillShipID,
-                        T1.AdresType    AS Type,
-                        (SELECT CardName  FROM [BBLive].[dbo].OCRD WHERE CardCode = T1.CardCode)
-                                        AS DisplayName,
+                        (C.CntctCode + T1.LineNum)  AS BillShipID,
+                        T1.AdresType                AS Type,
+                        (SELECT CardName FROM [BBLive].[dbo].OCRD WHERE CardCode = T1.CardCode)
+                                                    AS DisplayName,
                         CASE WHEN T1.AdresType = 'B' THEN 'OFFICE' ELSE 'SHIP' END
-                                        AS LocationName,
+                                                    AS LocationName,
                         ISNULL(NULLIF(CAST(T1.Building AS NVARCHAR(MAX)),''), T1.City) AS Line1,
-						ISNULL(NULLIF(CAST(T1.Block AS NVARCHAR(MAX)),''), T1.City)    AS Line2,
-						ISNULL(NULLIF(CAST(T1.Street AS NVARCHAR(MAX)),''), T1.City)   AS Line3,
+                        ISNULL(NULLIF(CAST(T1.Block    AS NVARCHAR(MAX)),''), T1.City) AS Line2,
+                        ISNULL(NULLIF(CAST(T1.Street   AS NVARCHAR(MAX)),''), T1.City) AS Line3,
                         CASE WHEN (SELECT ShipToDef FROM [BBLive].[dbo].OCRD WHERE CardCode = T1.CardCode) = T1.Address
-                             THEN 1 ELSE 0 END     AS IsDefault,
-                        ISNULL(T1.City,       '')  AS City,
+                            THEN 1 ELSE 0 END      AS IsDefault,
+                        ISNULL(T1.City,    '')      AS City,
                         ISNULL(NULLIF(CAST(T1.County AS NVARCHAR(MAX)),''), T1.Country) AS County,
-                        ISNULL(T1.State,      '')  AS [State],
-                        ISNULL(T1.Country,    '')  AS Country,
-                        ISNULL(T1.ZipCode,    '')  AS ZipCode,
-                        ISNULL(T0.Phone1,     T0.Phone2)  AS PhoneNumber,
-                        ISNULL(T0.Phone1,     T0.Phone2)  AS MobileNumber,
-                        ISNULL(T0.E_Mail,     '')  AS Email,
-                        ISNULL(T0.U_GSTIN, '33AAIFA8010E1Z1')  AS GSTNo,
+                        ISNULL(T1.State,   '')      AS [State],
+                        ISNULL(T1.Country, '')      AS Country,
+                        ISNULL(T1.ZipCode, '')      AS ZipCode,
+                        ISNULL(T0.Phone1,  T0.Phone2)   AS PhoneNumber,
+                        ISNULL(T0.Phone2,  T0.Cellular) AS MobileNumber,
+                        ISNULL(T0.E_Mail,  '')      AS Email,
+                        ISNULL(T0.U_GSTIN, '33AAIFA8010E1Z1') AS GSTNo,
                         CASE WHEN (SELECT validFor FROM [BBLive].[dbo].OCRD WHERE CardCode = T1.CardCode) = 'Y'
-                             THEN 1 ELSE 0 END     AS IsActive,
-                        ''                         AS GstStatus
+                            THEN 1 ELSE 0 END      AS IsActive,
+                        ''                          AS GstStatus
                     FROM [BBLive].[dbo].CRD1 T1
+                    LEFT JOIN [BBLive].[dbo].OCPR C
+                        ON C.CardCode = T1.CardCode
                     WHERE T1.CardCode = T0.CardCode
-                    AND T1.AdresType = 'S'
                     FOR JSON PATH
                 ) AS BillShipTo,
-
-                -- ── Contact persons (FOR JSON) ─────────────────────────────────────────
+            
+                -- ── Contact persons (FOR JSON) ────────────────────────────────────────────
                 (
                     SELECT *
                     FROM (
                         SELECT
-                            CntctCode                                 AS ContactPersonID,
-                            Name                                      AS ContactPersonName,
-                            Position                                  AS Designation,
-                            Cellolar                                  AS MobileNum,
-                            Cellolar                                  AS WhatsAppNum,
-                            E_MailL                                   AS EmailID,
-                            CASE WHEN Active = 'Y' THEN 1 ELSE 0 END AS IsActive,
-                            CAST(0 AS INT)                            AS IsSendOverDueReminder,
-                            SB.DivisionCode                           AS DivisionCode,
+                            CntctCode                                  AS ContactPersonID,
+                            Name                                       AS ContactPersonName,
+                            ISNULL(Position, 'proprietor')             AS Designation,
+                            ISNULL(Cellolar, T0.Cellular)              AS MobileNum,
+                            ISNULL(Cellolar, T0.Cellular)              AS WhatsAppNum,
+                            E_MailL                                    AS EmailID,
+                            CASE WHEN Active = 'Y' THEN 1 ELSE 0 END  AS IsActive,
+                            CAST(0 AS INT)                             AS IsSendOverDueReminder,
+                            SB.DivisionCode                            AS DivisionCode,
                             CAST(0 AS INT) AS PaymentSMS,
                             CAST(0 AS INT) AS PaymentEmail,
                             CAST(1 AS INT) AS PaymentWhatsapp,
@@ -312,9 +316,7 @@ async function getBPMasterData() {
                             CAST(0 AS INT) AS DistributorWhatsapp
                         FROM [BBLive].[dbo].OCPR
                         WHERE CardCode = T0.CardCode
-
                         UNION ALL
-
                         -- Fallback: empty row per division when no contacts exist
                         SELECT
                             CAST(0  AS INT), CAST('' AS NVARCHAR(100)), CAST('' AS NVARCHAR(100)),
@@ -332,65 +334,140 @@ async function getBPMasterData() {
                         )
                     ) X
                     FOR JSON PATH
-                ) AS BPContactDetails,
-
-                -- ── MST_MAP_BP_Division (FOR JSON) ─────────────────────────────────────
-                -- No external UDT table — built from T0 columns only.
-                -- Grade and PriceLisCode come from OCRD; the rest default to 0/''.
+                ) AS Map_BpContactDetails,
+            
+                -- ── MST_MAP_BP_Division (FOR JSON) ────────────────────────────────────────
                 (
                     SELECT
-                        CAST(0  AS INT)              AS MapDivisionID,
-                        CAST(0  AS INT)              AS AutoApprovalCreditLimit,
-                        CAST(0.00 AS DECIMAL(18,2))  AS AutoApprovalCreditLimitBal,
-                        CAST('' AS NVARCHAR(200))    AS BPRemarks,
-                        CAST(0.00 AS DECIMAL(18,2))  AS CreditLimit,
-                        ISNULL(T0.City, '')          AS Destination,
-                        CAST(0  AS INT)              AS DiscountPer,
-                        SB.DivisionCode              AS DivisionCode,
-                        CAST(0.00 AS DECIMAL(18,2))  AS ExcessPer,
-                        REPLACE(T0.U_Grade,'Grade ','') AS Grade,
-                        CAST(1  AS INT)              AS IsActive,
-                        CAST(0  AS INT)              AS IsOrderAutoApproval,
-                        CAST(0  AS INT)              AS Outstandingdays,
-                        ISNULL(T0.U_SalPriceCode, '') AS PriceLisCode,
-                        CAST(0  AS INT)              AS ShowLimit,
-                        CAST('Uathayam' AS NVARCHAR(200))    AS TransporterName
+                        ISNULL(T0.UpdateTS, '')             AS MapDivisionID,
+                        CAST(0  AS INT)                     AS AutoApprovalCreditLimit,
+                        CAST(0.00 AS DECIMAL(18,2))         AS AutoApprovalCreditLimitBal,
+                        CAST('' AS NVARCHAR(200))           AS BPRemarks,
+                        CAST(0.00 AS DECIMAL(18,2))         AS CreditLimit,
+                        ISNULL(T0.City, '')                 AS Destination,
+                        CAST(0  AS INT)                     AS DiscountPer,
+                        SB.DivisionCode                     AS DivisionCode,
+                        CAST(0.00 AS DECIMAL(18,2))         AS ExcessPer,
+                        REPLACE(T0.U_Grade,'Grade ','')     AS Grade,
+                        CAST(1  AS INT)                     AS IsActive,
+                        CAST(0  AS INT)                     AS IsOrderAutoApproval,
+                        CAST(0  AS INT)                     AS Outstandingdays,
+                        ISNULL(T0.U_SalPriceCode, '')       AS PriceLisCode,
+                        CAST(0  AS INT)                     AS ShowLimit,
+                        CAST('Uathayam' AS NVARCHAR(200))   AS TransporterName
                     FOR JSON PATH
                 ) AS MST_MAP_BP_Division,
-
-                -- ── MST_MAP_BP_Brand (FOR JSON) ────────────────────────────────────────
-                -- Brand = SB.SubBrandName (e.g. "ARISER SHIRT") per expected JSON
+            
+                -- ── MST_MAP_BP_Brand (FOR JSON) ───────────────────────────────────────────
                 (
                     SELECT
                         SB.SubBrandName AS Brand,
                         SB.DivisionCode AS DivisionCode
                     FOR JSON PATH
                 ) AS MST_MAP_BP_Brand,
-
-                -- ── MST_Map_BP_SubBrand (FOR JSON) ─────────────────────────────────────
+            
+                -- ── MST_Map_BP_SubBrand (FOR JSON) ── now includes DiscountPer ────────────
                 (
                     SELECT
-                        SB.SubBrandName AS SubBrandName,
-                        SB.DivisionCode AS DivisionCode
-                    FOR JSON PATH
-                ) AS MST_Map_BP_SubBrand
-
+                        SB2.SubBrandName        AS SubBrandName,
+                        CAST(
+                            CASE SB2.SubBrandName
+                                WHEN 'UATHAYAM DHOTIE'      THEN ISNULL(T0.U_Dis1,  0)
+                                WHEN 'UATHAYAM SHIRTING'    THEN ISNULL(T0.U_Dis1,  0)
+                                WHEN 'UATHAYAM RDY'         THEN ISNULL(T0.U_Dis2,  0)
+                                WHEN 'ADD SHIRT'            THEN ISNULL(T0.U_Dis2,  0)
+                                WHEN 'UATHAYAM RDY DHOTIE'  THEN ISNULL(T0.U_Dis8,  0)
+                                WHEN 'UATHAYAM HOS'         THEN ISNULL(T0.U_Dis3,  0)
+                                WHEN 'EVERYDAY DHOTIE'      THEN ISNULL(T0.U_Dis4,  0)
+                                WHEN 'EVERYDAY SHIRTING'    THEN ISNULL(T0.U_Dis4,  0)
+                                WHEN 'EVERYDAY RDY'         THEN ISNULL(T0.U_Dis5,  0)
+                                WHEN 'ADD DHOTIE'           THEN ISNULL(T0.U_Dis6,  0)
+                                WHEN 'ADD SHIRTING'         THEN ISNULL(T0.U_Dis6,  0)
+                                WHEN 'UATHAYAM KIDS SET'    THEN ISNULL(T0.U_Dis9,  0)
+                                WHEN 'ARISER SHIRT'         THEN ISNULL(T0.U_Dis7,  0)
+                                WHEN 'UATHAYAM MENS SET'    THEN ISNULL(T0.U_Dis11, 0)
+                                WHEN 'ARISER MENS TROUSERS' THEN ISNULL(T0.U_Dis10, 0)
+                                ELSE 0
+                            END
+                        AS DECIMAL(18,6))       AS DiscountPer,
+                        SB2.DivisionCode        AS DivisionCode
+                    FROM (VALUES
+                                ('ARISER',   'ARISER SHIRT',   'ARISER SHIRT'),
+                                ('ARISER',   'ARISER HOS',   'ARISER HOS'),
+                                ('ARISER',   'ARISER MENS TROUSERS',   'ARISER MENS TROUSERS'),
+                                ('UATHAYAM', 'UATHAYAM DHOTIE', 'UATHAYAM DHOTIE'),
+                                ('UATHAYAM', 'UATHAYAM SHIRTING', 'UATHAYAM SHIRTING'),
+                                ('UATHAYAM', 'UATHAYAM RDY', 'UATHAYAM RDY'),
+                                ('UATHAYAM', 'UATHAYAM RDY DHOTIE', 'UATHAYAM RDY DHOTIE'),
+                                ('UATHAYAM', 'UATHAYAM HOS', 'UATHAYAM HOS'),
+                                ('UATHAYAM', 'UATHAYAM KIDS SET', 'UATHAYAM KIDS SET'),
+                                ('UATHAYAM', 'UATHAYAM MENS SET', 'UATHAYAM MENS SET')
+                    ) AS SB2(DivisionCode, Brand, SubBrandName)
+                    FOR JSON PATH, INCLUDE_NULL_VALUES
+                ) AS MST_Map_BP_SubBrand,
+            
+                -- ── Discount_BP_Division (FOR JSON) ── FLAT, one row per sub-brand ────────
+                (
+                    SELECT
+                        'TRADE DISCOUNT'                            AS DiscountName,
+                        SB3.DivisionCode                            AS DivisionCode,
+                        SB3.SubBrandName                            AS Brand,          -- SubBrandName used as Brand per new structure
+                        CAST(
+                            CASE SB3.SubBrandName
+                                WHEN 'UATHAYAM DHOTIE'      THEN ISNULL(T0.U_Dis1,  0)
+                                WHEN 'UATHAYAM SHIRTING'    THEN ISNULL(T0.U_Dis1,  0)
+                                WHEN 'UATHAYAM RDY'         THEN ISNULL(T0.U_Dis2,  0)
+                                WHEN 'ADD SHIRT'            THEN ISNULL(T0.U_Dis2,  0)
+                                WHEN 'UATHAYAM RDY DHOTIE'  THEN ISNULL(T0.U_Dis8,  0)
+                                WHEN 'UATHAYAM HOS'         THEN ISNULL(T0.U_Dis3,  0)
+                                WHEN 'EVERYDAY DHOTIE'      THEN ISNULL(T0.U_Dis4,  0)
+                                WHEN 'EVERYDAY SHIRTING'    THEN ISNULL(T0.U_Dis4,  0)
+                                WHEN 'EVERYDAY RDY'         THEN ISNULL(T0.U_Dis5,  0)
+                                WHEN 'ADD DHOTIE'           THEN ISNULL(T0.U_Dis6,  0)
+                                WHEN 'ADD SHIRTING'         THEN ISNULL(T0.U_Dis6,  0)
+                                WHEN 'UATHAYAM KIDS SET'    THEN ISNULL(T0.U_Dis9,  0)
+                                WHEN 'ARISER SHIRT'         THEN ISNULL(T0.U_Dis7,  0)
+                                WHEN 'UATHAYAM MENS SET'    THEN ISNULL(T0.U_Dis11, 0)
+                                WHEN 'ARISER MENS TROUSERS' THEN ISNULL(T0.U_Dis10, 0)
+                                ELSE 0
+                            END
+                        AS DECIMAL(18,6))                           AS DiscountPer,
+                        CAST('2019-04-01T00:00:00' AS NVARCHAR(30)) AS FromDate,
+                        CAST('2030-03-31T00:00:00' AS NVARCHAR(30)) AS ToDate
+                    FROM (VALUES
+                                ('ARISER',   'ARISER SHIRT',   'ARISER SHIRT'),
+                                ('ARISER',   'ARISER HOS',   'ARISER HOS'),
+                                ('ARISER',   'ARISER MENS TROUSERS',   'ARISER MENS TROUSERS'),
+                                ('UATHAYAM', 'UATHAYAM DHOTIE', 'UATHAYAM DHOTIE'),
+                                ('UATHAYAM', 'UATHAYAM SHIRTING', 'UATHAYAM SHIRTING'),
+                                ('UATHAYAM', 'UATHAYAM RDY', 'UATHAYAM RDY'),
+                                ('UATHAYAM', 'UATHAYAM RDY DHOTIE', 'UATHAYAM RDY DHOTIE'),
+                                ('UATHAYAM', 'UATHAYAM HOS', 'UATHAYAM HOS'),
+                                ('UATHAYAM', 'UATHAYAM KIDS SET', 'UATHAYAM KIDS SET'),
+                                ('UATHAYAM', 'UATHAYAM MENS SET', 'UATHAYAM MENS SET')
+                    ) AS SB3(DivisionCode, Brand, SubBrandName)
+                    FOR JSON PATH, INCLUDE_NULL_VALUES
+                ) AS Discount_BP_Division
+            
             FROM [BBLive].[dbo].OCRD T0
-
-            -- ── Cross join against all sub-brands ──────────────────────────────────────
+            -- ── Cross join against all sub-brands ─────────────────────────────────────────
             CROSS JOIN (VALUES
-                ('ARISER',    'ARISER',    'ARISER SHIRT'),
-                ('ARISER',    'ARISER',    'ARISER MENS TROUSERS'),
-                ('UATHAYAM',  'UATHAYAM',  'UATHAYAM DHOTIE'),
-                ('UATHAYAM',  'UATHAYAM',  'UATHAYAM SHIRTING'),
-                ('UATHAYAM',  'UATHAYAM',  'UATHAYAM HOS'),
-                ('UATHAYAM',  'UATHAYAM',  'UATHAYAM KIDS SET'),
-                ('UATHAYAM',  'UATHAYAM',  'UATHAYAM MENS SET')
+                                ('ARISER',   'ARISER SHIRT',   'ARISER SHIRT'),
+                                ('ARISER',   'ARISER HOS',   'ARISER HOS'),
+                                ('ARISER',   'ARISER MENS TROUSERS',   'ARISER MENS TROUSERS'),
+                                ('UATHAYAM', 'UATHAYAM DHOTIE', 'UATHAYAM DHOTIE'),
+                                ('UATHAYAM', 'UATHAYAM SHIRTING', 'UATHAYAM SHIRTING'),
+                                ('UATHAYAM', 'UATHAYAM RDY', 'UATHAYAM RDY'),
+                                ('UATHAYAM', 'UATHAYAM RDY DHOTIE', 'UATHAYAM RDY DHOTIE'),
+                                ('UATHAYAM', 'UATHAYAM HOS', 'UATHAYAM HOS'),
+                                ('UATHAYAM', 'UATHAYAM KIDS SET', 'UATHAYAM KIDS SET'),
+                                ('UATHAYAM', 'UATHAYAM MENS SET', 'UATHAYAM MENS SET')
             ) AS SB(DivisionCode, Brand, SubBrandName)
-
-            WHERE T0.CardType = 'C'
-            AND T0.validFor  = 'Y'
+            
+            WHERE T0.CardType    = 'C'
+            AND T0.validFor    = 'Y'
             AND T0.U_AreaCode != ''
+            AND T0.U_GSTIN NOT IN ('UNREGISTERED', '')            
             ORDER BY T0.CardCode, SB.DivisionCode, SB.SubBrandName;
         `;
 

@@ -4,11 +4,21 @@ require('dotenv').config();
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
-const CONCURRENCY = parseInt(process.env.SF_CONCURRENCY,    10) || 5;
-const BATCH_SIZE  = parseInt(process.env.SF_BATCH_SIZE,     10) || 50;
-const MAX_RETRIES = parseInt(process.env.SF_MAX_RETRIES,    10) || 3;
-const RETRY_DELAY = parseInt(process.env.SF_RETRY_DELAY_MS, 10) || 1500;
-const REQ_TIMEOUT = parseInt(process.env.SF_TIMEOUT_MS,     10) || 30000;
+const CONCURRENCY    = parseInt(process.env.SF_CONCURRENCY,         10) || 5;
+const BATCH_SIZE     = parseInt(process.env.SF_BATCH_SIZE,          10) || 50;
+const MAX_RETRIES    = parseInt(process.env.SF_MAX_RETRIES,         10) || 3;
+const RETRY_DELAY    = parseInt(process.env.SF_RETRY_DELAY_MS,      10) || 1500;
+const REQ_TIMEOUT    = parseInt(process.env.SF_TIMEOUT_MS,          10) || 30000;
+
+// Price list batches must stay small to avoid Apex SOQL governor limit (101/tx).
+// Each record costs ~2 SOQLs inside PriceListUpsertAPI.createPriceList, so
+// a batch of 25 → ~50 queries — safely under the cap.
+// Override with SF_BATCH_SIZE_PRICELIST in .env if needed.
+const PL_BATCH_SIZE  = parseInt(process.env.SF_BATCH_SIZE_PRICELIST, 10) || 25;
+
+// Optional pause between price-list batches (ms). Helps if the org is close
+// to async/CPU limits. Set SF_PL_BATCH_DELAY_MS=0 in .env to disable.
+const PL_BATCH_DELAY = parseInt(process.env.SF_PL_BATCH_DELAY_MS,   10) || 300;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LOGGER
@@ -227,7 +237,14 @@ async function upsertProducts(products) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRICE LISTS  — batched bulk upload
+// PRICE LISTS
+//
+// Apex governor limit: 101 SOQL queries per transaction.
+// PriceListUpsertAPI.createPriceList fires ~2 SOQLs per record inside a loop,
+// so we cap each batch at PL_BATCH_SIZE (default 25) to stay well under 101.
+//
+// Batches run SEQUENTIALLY (concurrency=1) with a short inter-batch pause
+// to prevent adjacent transactions from stacking up in the same Apex context.
 // ─────────────────────────────────────────────────────────────────────────────
 async function upsertPriceLists(priceLists) {
     if (!Array.isArray(priceLists) || priceLists.length === 0) {
@@ -247,23 +264,29 @@ async function upsertPriceLists(priceLists) {
     };
 
     const total      = priceLists.length;
-    const totalBatch = Math.ceil(total / BATCH_SIZE);
+    const totalBatch = Math.ceil(total / PL_BATCH_SIZE);
     const summary    = { success: [], failed: [] };
 
     log.divider('PRICELIST UPSERT START');
-    log.info(`Total records : ${total}`);
-    log.info(`Batch size    : ${BATCH_SIZE}`);
-    log.info(`Total batches : ${totalBatch}`);
-    log.info(`Concurrency   : ${CONCURRENCY}`);
-    log.info(`Endpoint      : ${url}`);
+    log.info(`Total records    : ${total}`);
+    log.info(`Batch size       : ${PL_BATCH_SIZE}  (capped for Apex SOQL limit)`);
+    log.info(`Total batches    : ${totalBatch}`);
+    log.info(`Inter-batch delay: ${PL_BATCH_DELAY}ms`);
+    log.info(`Endpoint         : ${url}`);
     log.divider();
 
+    // Build batches
     const batches = [];
-    for (let i = 0; i < total; i += BATCH_SIZE) batches.push(priceLists.slice(i, i + BATCH_SIZE));
+    for (let i = 0; i < total; i += PL_BATCH_SIZE) {
+        batches.push(priceLists.slice(i, i + PL_BATCH_SIZE));
+    }
 
-    const tasks = batches.map((batch, batchIdx) => async () => {
+    // Process SEQUENTIALLY — one batch at a time to avoid SOQL limit across
+    // concurrent transactions sharing the same Apex execution context.
+    for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+        const batch       = batches[batchIdx];
         const batchNum    = batchIdx + 1;
-        const recordRange = `records ${batchIdx * BATCH_SIZE + 1}–${Math.min((batchIdx + 1) * BATCH_SIZE, total)}`;
+        const recordRange = `records ${batchIdx * PL_BATCH_SIZE + 1}–${Math.min((batchIdx + 1) * PL_BATCH_SIZE, total)}`;
         log.info(`Batch ${batchNum}/${totalBatch} — sending ${batch.length} records (${recordRange})`);
 
         try {
@@ -283,18 +306,22 @@ async function upsertPriceLists(priceLists) {
             log.error(`  Detail: ${JSON.stringify(body)}`);
         }
 
-        const done = summary.success.length + summary.failed.length;
-        log.progress(done, totalBatch, 'batches');
-    });
+        log.progress(batchIdx + 1, totalBatch, 'batches');
 
-    await runWithConcurrency(tasks, CONCURRENCY);
+        // Pause between batches to let SF finish the previous transaction
+        if (PL_BATCH_DELAY > 0 && batchIdx < batches.length - 1) {
+            await sleep(PL_BATCH_DELAY);
+        }
+    }
 
     const successRecords = summary.success.reduce((n, b) => n + b.count, 0);
     const failedRecords  = summary.failed.reduce ((n, b) => n + b.count, 0);
 
     log.divider('PRICELIST UPSERT SUMMARY');
     log.ok  (`Batches OK     : ${summary.success.length}  (${successRecords} records)`);
-    log.error(`Batches FAILED : ${summary.failed.length}   (${failedRecords} records)`);
+    if (summary.failed.length > 0) {
+        log.error(`Batches FAILED : ${summary.failed.length}  (${failedRecords} records)`);
+    }
     log.divider();
 
     if (summary.success.length === 0) throw new Error(`All ${totalBatch} PriceList batches failed.`);
@@ -469,13 +496,6 @@ async function upsertSchemes(schemes) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BUSINESS PARTNERS
-//
-// SF endpoint enforces a hard limit of MAX 1 BP per request.
-// We send one BP at a time, wrapped in { businessPartners: [bp] },
-// running up to CONCURRENCY requests in parallel.
-//
-// Endpoint: SF_API_URL_BusinessPartner
-//   (or auto-derived from SF_API_URL_ProductMaster)
 // ─────────────────────────────────────────────────────────────────────────────
 async function upsertBusinessPartners(payload) {
     const businessPartners = payload?.businessPartners ?? payload;
@@ -487,7 +507,6 @@ async function upsertBusinessPartners(payload) {
 
     const token = await getSalesforceToken();
 
-    // Resolve endpoint URL
     let url = process.env.SF_API_URL_BusinessPartner;
     if (!url && process.env.SF_API_URL_ProductMaster) {
         url = process.env.SF_API_URL_ProductMaster.replace('ProductUpsertAPI', 'BusinessPartnerUpsertAPI');
@@ -513,13 +532,10 @@ async function upsertBusinessPartners(payload) {
     log.info(`Mode             : 1 BP per request (SF limit)`);
     log.divider();
 
-    // SF only accepts exactly 1 BP per request — mirrors upsertProducts pattern
     const tasks = businessPartners.map((bp, idx) => async () => {
         const code = bp.BPCode ?? `IDX-${idx}`;
-
-        // Always wrap a single BP in the expected envelope
         const body = { businessPartners: [bp] };
-        console.log("****************************",JSON.stringify(body))
+
         try {
             const response = await withRetry(
                 () => axios.post(url, body, { headers, timeout: REQ_TIMEOUT }),

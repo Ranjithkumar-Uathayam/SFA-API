@@ -132,42 +132,66 @@ function mapToSalesforcePayload(rows) {
     return Array.from(map.values());
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PRICE LIST MAPPER
+//
+// Changes vs previous version:
+//   1. PriceID    — passed through from row.PriceID (ROW_NUMBER in SQL).
+//   2. EffectiveFrom / EffectiveTo — taken directly from DB strings.
+//                  SQL guarantees a non-null ISO datetime string via ISNULL
+//                  fallback, so no extra defaulting needed here.
+// ─────────────────────────────────────────────────────────────────────────────
 function mapToPriceListPayload(sqlRows) {
     if (!sqlRows || sqlRows.length === 0) return [];
+
+    // productCode → priceListId → priceList entry
     const productMap = new Map();
 
     for (const row of sqlRows) {
         const productCode = row.ProductCode;
         const priceListId = row.PriceListID;
-        if (!productMap.has(productCode)) productMap.set(productCode, new Map());
+
+        if (!productMap.has(productCode)) {
+            productMap.set(productCode, new Map());
+        }
+
         const priceListMap = productMap.get(productCode);
+
         if (!priceListMap.has(priceListId)) {
             priceListMap.set(priceListId, {
                 PriceListID  : priceListId,
                 SubBrandCode : row.SubBrandCode  ?? null,
                 BPProductName: row.BPProductName ?? productCode,
                 PriceLisCode : row.PriceListCode ?? null,
-                EffectiveFrom: row.EffectiveFrom ?? null,
-                EffectiveTo  : row.EffectiveTo   ?? null,
+                EffectiveFrom: row.EffectiveFrom ?? '2025-01-01T00:00:00',   
+                EffectiveTo  : row.EffectiveTo   ?? '2055-12-31T00:00:00',   
                 IsActive     : row.PriceListIsActive ?? 1,
                 Prices       : []
             });
         }
+
         const entry = priceListMap.get(priceListId);
+
+        // Deduplicate by BPCategory — each category gets one Prices entry.
         if (!entry.Prices.some(p => p.BPCategory === row.BPCategory)) {
             entry.Prices.push({
                 PriceListID: priceListId,
-                BPCategory : row.BPCategory   ?? null,
-                Price      : row.Price         ?? 0,
-                MRP        : row.MRP           ?? 0,
+                PriceID    : row.PriceID    ?? null,   // ← new field
+                BPCategory : row.BPCategory ?? null,
+                Price      : row.Price      ?? 0,
+                MRP        : row.MRP        ?? 0,
                 IsActive   : row.PriceIsActive ?? 1
             });
         }
     }
 
     const result = [];
-    for (const [productCode, priceListMap] of productMap)
-        result.push({ ProductCode: productCode, PriceList: Array.from(priceListMap.values()) });
+    for (const [productCode, priceListMap] of productMap) {
+        result.push({
+            ProductCode: productCode,
+            PriceList  : Array.from(priceListMap.values())
+        });
+    }
     return result;
 }
 
@@ -272,7 +296,15 @@ function mapToSchemePayload(rows) {
                     AllowMultiplyFreeQty: row.AllowMultiplyFreeQty ?? 0,
                     MaxAllowedFreeQty   : row.MaxAllowedFreeQty   ?? 0,
                     IsActive            : row.ProductIsActive      ?? 1,
-                    MappingStatus       : row.MappingStatus        ?? 1
+                    MappingStatus       : row.MappingStatus        ?? 1,
+                    SC_ProdAlternate: [
+                        {
+                            ProductCode: null,
+                            SizeCode: null,
+                            ColorCode: null,
+                            IsActive: 0
+                        }
+                    ]
                 });
             }
         }
@@ -295,31 +327,10 @@ function safeParse(val) {
     return [];
 }
 
-/**
- * parseBillShipTo
- *
- * SQL now returns BillShipTo as a FOR JSON PATH flat array where:
- *   BillShipID = T1.LineNum  (integer — matches expected JSON 35163 / 36183)
- *
- * All address columns are flat at the top level of each row.
- * This function reshapes them into the nested Address object expected by SF.
- *
- * Expected output per entry:
- * {
- *   BillShipID  : <number>        ← T1.LineNum
- *   Type        : "B" | "S"
- *   DisplayName : <string>
- *   LocationName: "OFFICE"|"SHIP"
- *   Address: {
- *     Line1, Line2, Line3, IsDefault, City, County, State, Country,
- *     ZipCode, PhoneNumber, MobileNumber, Email, GSTNo, IsActive, GstStatus
- *   }
- * }
- */
 function parseBillShipTo(val) {
     const rows = safeParse(val);
     return rows.map(r => ({
-        BillShipID  : r.BillShipID,          // integer from T1.LineNum
+        BillShipID  : r.BillShipID,
         Type        : r.Type,
         DisplayName : r.DisplayName,
         LocationName: r.LocationName,
@@ -330,10 +341,10 @@ function parseBillShipTo(val) {
             IsDefault   : r.IsDefault    ?? 0,
             City        : r.City         ?? '',
             County      : r.County       ?? '',
-            State       : resolveStateName(r.State)   ?? '',
-            Country     : resolveCountryName(r.Country)      ?? '',
+            State       : resolveStateName(r.State)    ?? '',
+            Country     : resolveCountryName(r.Country) ?? '',
             ZipCode     : r.ZipCode      ?? '',
-            PhoneNumber : r.PhoneNumber  ?? '',   // from T1.Tel1
+            PhoneNumber : r.PhoneNumber  ?? '',
             MobileNumber: r.MobileNumber ?? '',
             Email       : r.Email        ?? '',
             GSTNo       : r.GSTNo        ?? '',
@@ -343,17 +354,6 @@ function parseBillShipTo(val) {
     }));
 }
 
-/**
- * mapToBPPayload
- *
- * Changes vs previous version
- * ───────────────────────────
- * 1. parseBillShipTo uses BillShipID (= LineNum integer) for dedup
- * 2. Discount_BP_Division — one entry per DivisionCode
- * 3. MST_MAP_BP_Brand.Brand deduped by SubBrandName (not DivisionCode Brand)
- * 4. All FOR JSON cols handled via safeParse with correct dedup keys
- * 5. MST_MAP_BP_Division — hardcoded defaults (no external UDT table join)
- */
 function mapToBPPayload(rows) {
     if (!rows || rows.length === 0) return { businessPartners: [] };
 
@@ -371,7 +371,7 @@ function mapToBPPayload(rows) {
                 AllowCreditLimit: row.AllowCreditLimit ?? 0,
                 DisplayName     : row.DisplayName      ?? row.BPName,
                 BPCategory      : row.BPCategory       ?? '',
-                BPGroupCode     : '',                          // always '' per expected JSON
+                BPGroupCode     : '',
                 SR_BPCode       : row.SR_BPCode        ?? '',
                 GradeOfBP       : row.GradeOfBP        ?? '',
                 CustomerRemark  : row.CustomerRemark   ?? '',
@@ -380,8 +380,8 @@ function mapToBPPayload(rows) {
                 AreaCode        : row.AreaCode         ?? '',
 
                 BillShipTo          : [],
-                BPContactDetails    : [],
-                Discount_BP_Division: [],
+                Map_BpContactDetails    : [],
+                Discount_BP_Division: JSON.parse(row.Discount_BP_Division) ,
                 MST_MAP_BP_Division : [],
                 MST_MAP_BP_Brand    : [],
                 MST_Map_BP_SubBrand : []
@@ -390,9 +390,6 @@ function mapToBPPayload(rows) {
 
         const bp = bpMap.get(bpCode);
 
-        // ── BillShipTo ────────────────────────────────────────────────────────
-        // Parse once on first encounter (same data for all sub-brand rows).
-        // BillShipID is now an integer (LineNum) — dedup by LineNum + Type.
         if (bp.BillShipTo.length === 0) {
             for (const entry of parseBillShipTo(row.BillShipTo)) {
                 const isDup = bp.BillShipTo.some(
@@ -402,26 +399,18 @@ function mapToBPPayload(rows) {
             }
         }
 
-        // ── BPContactDetails — deduplicate by ContactPersonID + DivisionCode ──
-        for (const c of safeParse(row.BPContactDetails)) {
-            const isDup = bp.BPContactDetails.some(
+        for (const c of safeParse(row.Map_BpContactDetails)) {
+            const isDup = bp.Map_BpContactDetails.some(
                 x => x.ContactPersonID === c.ContactPersonID && x.DivisionCode === c.DivisionCode
             );
-            if (!isDup) bp.BPContactDetails.push(c);
+            if (!isDup) bp.Map_BpContactDetails.push(c);
         }
 
-        // ── Discount_BP_Division — ONE entry per DivisionCode ─────────────────
-        if (!bp.Discount_BP_Division.some(d => d.DivisionCode === row.DivisionCode)) {
-            bp.Discount_BP_Division.push({
-                DiscountName: 'TRADE DISCOUNT',
-                DivisionCode: row.DivisionCode,
-                DiscountPer : row.DiscountPer ?? 0,
-                FromDate    : '2019-04-01T00:00:00',
-                ToDate      : '2030-03-31T00:00:00'
-            });
-        }
+        // if (!bp.Discount_BP_Division.some(d => d.DivisionCode === row.DivisionCode)) {
+        //     console.log("******row.Discount_BP_Division",row.Discount_BP_Division)
+        //     bp.Discount_BP_Division.push(row.Discount_BP_Division)
+        // }
 
-        // ── MST_MAP_BP_Division — deduplicate by DivisionCode ─────────────────
         for (const d of safeParse(row.MST_MAP_BP_Division)) {
             if (!bp.MST_MAP_BP_Division.some(x => x.DivisionCode == d.DivisionCode))
             bp.MST_MAP_BP_Division.push({
@@ -432,14 +421,11 @@ function mapToBPPayload(rows) {
             });
         }
 
-        // ── MST_MAP_BP_Brand — deduplicate by Brand + DivisionCode ────────────
-        // Brand field = SubBrandName (e.g. "ARISER SHIRT") per expected JSON.
         for (const b of safeParse(row.MST_MAP_BP_Brand)) {
             if (!bp.MST_MAP_BP_Brand.some(x => x.Brand == b.Brand && x.DivisionCode == b.DivisionCode))
                 bp.MST_MAP_BP_Brand.push(b);
         }
 
-        // ── MST_Map_BP_SubBrand — deduplicate by SubBrandName + DivisionCode ──
         for (const s of safeParse(row.MST_Map_BP_SubBrand)) {
             if (!bp.MST_Map_BP_SubBrand.some(x => x.SubBrandName == s.SubBrandName && x.DivisionCode == s.DivisionCode))
                 bp.MST_Map_BP_SubBrand.push(s);
@@ -450,7 +436,7 @@ function mapToBPPayload(rows) {
 }
 
 function decimal(val) {
-    return Number(val ?? 0).toFixed(2);
+    return parseFloat(Number(val ?? 0).toFixed(2));
 }
 
 // ── Legacy helpers ────────────────────────────────────────────────────────────

@@ -265,49 +265,57 @@ function mapToSchemePayload(rows) {
                     ToDate                     : row.ToDate,
                     AllowDiscountForAllProducts: row.AllowDiscountForAllProducts,
                     DiscountPer                : row.DiscountPer,
-                    SC_BpCategoryMapping       : [{ BPCategory: 'DEALER' }],
-                    StateMapping               : [{ StateCode: resolveStateName(row.StateCode) }],
-                    RoleMapping                : [{ Role: 'RBM' }],
-                    SC_BpExclution             : [{ BPCode: null }],
-                    SC_BpInclution             : [{ BPCode: row.BPCode ?? null }],
-                    SC_ProductMapping          : [],
-                    SC_ProdGroupMapping        : [{ GroupCode:null, StyleCode:null, MinOrderQty:null, FreeQty:null, Applicability:null, AllowMultiplyFreeQty:0, MaxAllowedFreeQty:null, GroupName:null, IsActive:0, MappingStatus:0 }],
-                    SC_ProdAlternate           : [{ ProductCode:null, SizeCode:null, ColorCode:null, IsActive:0 }],
-                    SC_ProdGroupAlternate      : [{ GroupName:null, StyleCode:null, IsActive:0 }],
-                    SC_Brand_Discount          : [{ Brand:null, DiscountType:null, DiscountVal:null, IsActive:0 }],
-                    SC_ProdGroupDirectDiscount : [{ DivisionCode:null, GroupCode:null, GroupName:null, StyleCode:null, StyleName:null, DiscountType:null, DiscountVal:null, IsActive:0 }],
-                    SC_ProductDirectDiscount   : [{ ProductCode:null, SizeCode:null, ColorCode:null, DiscountType:null, DiscountVal:null, IsActive:0 }]
+                    SC_BpCategoryMapping       : JSON.parse(row.SC_BpCategoryMapping),
+                    StateMapping               : JSON.parse(row.StateMapping),
+                    RoleMapping                : [
+                                                    {
+                                                        "Role": "RBM"
+                                                    }
+                                                ],//JSON.parse(row.RoleMapping),
+                    SC_BpExclution             : JSON.parse(row.SC_BpExclution),
+                    SC_BpInclution             :[
+                                                    {
+                                                        "BPCode": null
+                                                    }
+                                                ],//JSON.parse(row.SC_BpInclution),
+                    SC_ProductMapping          : JSON.parse(row.SC_ProductMapping),
+                    SC_ProdGroupMapping        : JSON.parse(row.SC_ProdGroupMapping),
+                    SC_ProdAlternate           : JSON.parse(row.SC_ProdAlternate),
+                    SC_ProdGroupAlternate      : JSON.parse(row.SC_ProdGroupAlternate),
+                    SC_Brand_Discount          : JSON.parse(row.SC_Brand_Discount),
+                    SC_ProdGroupDirectDiscount : JSON.parse(row.SC_ProdGroupDirectDiscount),
+                    SC_ProductDirectDiscount   : JSON.parse(row.SC_ProductDirectDiscount)
                 }
             });
         }
-        const policy = policyMap.get(policyId).Policy;
-        if (row.ProductCode) {
-            const dup = policy.SC_ProductMapping.some(
-                p => p.ProductCode === row.ProductCode && p.SizeCode === row.SizeCode && p.ColorCode === row.ColorCode
-            );
-            if (!dup) {
-                policy.SC_ProductMapping.push({
-                    ProductCode         : row.ProductCode,
-                    SizeCode            : row.SizeCode            ?? null,
-                    ColorCode           : row.ColorCode           ?? null,
-                    MinOrderQty         : row.MinOrderQty         ?? 0,
-                    FreeQty             : row.FreeQty             ?? 0,
-                    Applicability       : row.ProductApplicability ?? 'S',
-                    AllowMultiplyFreeQty: row.AllowMultiplyFreeQty ?? 0,
-                    MaxAllowedFreeQty   : row.MaxAllowedFreeQty   ?? 0,
-                    IsActive            : row.ProductIsActive      ?? 1,
-                    MappingStatus       : row.MappingStatus        ?? 1,
-                    SC_ProdAlternate: [
-                        {
-                            ProductCode: null,
-                            SizeCode: null,
-                            ColorCode: null,
-                            IsActive: 0
-                        }
-                    ]
-                });
-            }
-        }
+        //const policy = policyMap.get(policyId).Policy;
+        // if (row.ProductCode) {
+        //     const dup = policy.SC_ProductMapping.some(
+        //         p => p.ProductCode === row.ProductCode && p.SizeCode === row.SizeCode && p.ColorCode === row.ColorCode
+        //     );
+        //     if (!dup) {
+        //         policy.SC_ProductMapping.push({
+        //             ProductCode         : row.ProductCode,
+        //             SizeCode            : row.SizeCode            ?? null,
+        //             ColorCode           : row.ColorCode           ?? null,
+        //             MinOrderQty         : row.MinOrderQty         ?? 0,
+        //             FreeQty             : row.FreeQty             ?? 0,
+        //             Applicability       : row.ProductApplicability ?? 'S',
+        //             AllowMultiplyFreeQty: row.AllowMultiplyFreeQty ?? 0,
+        //             MaxAllowedFreeQty   : row.MaxAllowedFreeQty   ?? 0,
+        //             IsActive            : row.ProductIsActive      ?? 1,
+        //             MappingStatus       : row.MappingStatus        ?? 1,
+        //             SC_ProdAlternate: [
+        //                 {
+        //                     ProductCode: null,
+        //                     SizeCode: null,
+        //                     ColorCode: null,
+        //                     IsActive: 0
+        //                 }
+        //             ]
+        //         });
+        //     }
+        // }
     }
     return Array.from(policyMap.values());
 }
@@ -375,61 +383,61 @@ function mapToBPPayload(rows) {
                 SR_BPCode       : row.SR_BPCode        ?? '',
                 GradeOfBP       : row.GradeOfBP        ?? '',
                 CustomerRemark  : row.CustomerRemark   ?? '',
-                Latitude        : row.Latitude         ?? 0,
-                Longitude       : row.Longitude        ?? 0,
+                Latitude        : row.Latitude         ?? 0.00,
+                Longitude       : row.Longitude        ?? 0.00,
                 AreaCode        : row.AreaCode         ?? '',
 
-                BillShipTo          : [],
-                Map_BpContactDetails    : [],
+                BillShipTo          : JSON.parse(row.BillShipTo),
+                Map_BpContactDetails    : JSON.parse(row.Map_BpContactDetails),
                 Discount_BP_Division: JSON.parse(row.Discount_BP_Division) ,
-                MST_MAP_BP_Division : [],
-                MST_MAP_BP_Brand    : [],
-                MST_Map_BP_SubBrand : []
+                MST_MAP_BP_Division : JSON.parse(row.MST_MAP_BP_Division),
+                MST_MAP_BP_Brand    : JSON.parse(row.MST_Map_BP_SubBrand),
+                MST_Map_BP_SubBrand : JSON.parse(row.MST_Map_BP_SubBrand)
             });
         }
 
         const bp = bpMap.get(bpCode);
 
-        if (bp.BillShipTo.length === 0) {
-            for (const entry of parseBillShipTo(row.BillShipTo)) {
-                const isDup = bp.BillShipTo.some(
-                    b => b.BillShipID === entry.BillShipID && b.Type === entry.Type
-                );
-                if (!isDup) bp.BillShipTo.push(entry);
-            }
-        }
+        // if (bp.BillShipTo.length === 0) {
+        //     for (const entry of parseBillShipTo(row.BillShipTo)) {
+        //         const isDup = bp.BillShipTo.some(
+        //             b => b.BillShipID === entry.BillShipID && b.Type === entry.Type
+        //         );
+        //         if (!isDup) bp.BillShipTo.push(entry);
+        //     }
+        // }
 
-        for (const c of safeParse(row.Map_BpContactDetails)) {
-            const isDup = bp.Map_BpContactDetails.some(
-                x => x.ContactPersonID === c.ContactPersonID && x.DivisionCode === c.DivisionCode
-            );
-            if (!isDup) bp.Map_BpContactDetails.push(c);
-        }
+        // for (const c of safeParse(row.Map_BpContactDetails)) {
+        //     const isDup = bp.Map_BpContactDetails.some(
+        //         x => x.ContactPersonID === c.ContactPersonID && x.DivisionCode === c.DivisionCode
+        //     );
+        //     if (!isDup) bp.Map_BpContactDetails.push(c);
+        // }
 
         // if (!bp.Discount_BP_Division.some(d => d.DivisionCode === row.DivisionCode)) {
         //     console.log("******row.Discount_BP_Division",row.Discount_BP_Division)
         //     bp.Discount_BP_Division.push(row.Discount_BP_Division)
         // }
 
-        for (const d of safeParse(row.MST_MAP_BP_Division)) {
-            if (!bp.MST_MAP_BP_Division.some(x => x.DivisionCode == d.DivisionCode))
-            bp.MST_MAP_BP_Division.push({
-                ...d,
-                AutoApprovalCreditLimitBal: decimal(d.AutoApprovalCreditLimitBal),
-                CreditLimit: decimal(d.CreditLimit),
-                ExcessPer: decimal(d.ExcessPer)
-            });
-        }
+        // for (const d of safeParse(row.MST_MAP_BP_Division)) {
+        //     if (!bp.MST_MAP_BP_Division.some(x => x.DivisionCode == d.DivisionCode))
+        //     bp.MST_MAP_BP_Division.push({
+        //         ...d,
+        //         AutoApprovalCreditLimitBal: decimal(d.AutoApprovalCreditLimitBal),
+        //         CreditLimit: decimal(d.CreditLimit),
+        //         ExcessPer: decimal(d.ExcessPer)
+        //     });
+        // }
 
-        for (const b of safeParse(row.MST_MAP_BP_Brand)) {
-            if (!bp.MST_MAP_BP_Brand.some(x => x.Brand == b.Brand && x.DivisionCode == b.DivisionCode))
-                bp.MST_MAP_BP_Brand.push(b);
-        }
+        // for (const b of safeParse(row.MST_MAP_BP_Brand)) {
+        //     if (!bp.MST_MAP_BP_Brand.some(x => x.Brand == b.Brand && x.DivisionCode == b.DivisionCode))
+        //         bp.MST_MAP_BP_Brand.push(b);
+        // }
 
-        for (const s of safeParse(row.MST_Map_BP_SubBrand)) {
-            if (!bp.MST_Map_BP_SubBrand.some(x => x.SubBrandName == s.SubBrandName && x.DivisionCode == s.DivisionCode))
-                bp.MST_Map_BP_SubBrand.push(s);
-        }
+        // for (const s of safeParse(row.MST_Map_BP_SubBrand)) {
+        //     if (!bp.MST_Map_BP_SubBrand.some(x => x.SubBrandName == s.SubBrandName && x.DivisionCode == s.DivisionCode))
+        //         bp.MST_Map_BP_SubBrand.push(s);
+        // }
     }
 
     return { businessPartners: Array.from(bpMap.values()) };

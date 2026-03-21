@@ -445,6 +445,7 @@ async function upsertSchemes(schemes) {
         const policyId  = scheme?.Policy?.PolicyID     ?? 'UNKNOWN';
 
         try {
+            console.log("****************", JSON.stringify(scheme))
             const response = await withRetry(
                 () => axios.post(url, scheme, { headers, timeout: REQ_TIMEOUT }),
                 policyNum
@@ -537,10 +538,12 @@ async function upsertBusinessPartners(payload) {
         const body = { businessPartners: [bp] };
 
         try {
-            const response = await withRetry(
-                () => axios.post(url, body, { headers, timeout: REQ_TIMEOUT }),
-                code
-            );
+            console.log("*************body", JSON.stringify(body) )
+            // const response = await withRetry(
+            //     () => axios.post(url, body, { headers, timeout: REQ_TIMEOUT }),
+            //     code
+            // );
+            const response = {}
             verifySFResponse(response, code);
             summary.success.push({ code, status: response.status, data: response.data });
 

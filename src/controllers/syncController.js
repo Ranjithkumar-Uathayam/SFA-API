@@ -314,7 +314,7 @@ exports.syncBusinessPartners = async (req, res) => {
             log.warn('No BP data found in DB.');
             return res.status(200).json({ message: 'No BP data found.' });
         }
-
+        console.log("*************sqlData", sqlData )
         const payload  = mapper.mapToBPPayload(sqlData);
         const totalBPs = payload.businessPartners.length;
         log.info(`Mapped to ${totalBPs} unique business partner(s)`);

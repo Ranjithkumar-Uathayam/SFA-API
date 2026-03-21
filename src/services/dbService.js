@@ -685,8 +685,8 @@ async function getBPMasterData() {
                         ISNULL(T1.State,'') AS State,
                         ISNULL(T1.Country,'') AS Country,
                         ISNULL(T1.ZipCode,'') AS ZipCode,
-                        ISNULL(T0.Phone1, T0.Phone2) AS PhoneNumber,
-                        ISNULL(T0.Phone2, T0.Cellular) AS MobileNumber,
+                        RIGHT(ISNULL(T0.Phone1, T0.Phone2), 10) AS PhoneNumber,
+                        RIGHT(ISNULL(T0.Phone2, T0.Cellular), 10) AS MobileNumber,
                         ISNULL(T0.E_Mail,'') AS Email,
                         ISNULL(T0.U_GSTIN,'') AS GSTNo,
                         CASE WHEN T0.validFor = 'Y' THEN 1 ELSE 0 END AS IsActive,
@@ -700,21 +700,27 @@ async function getBPMasterData() {
                 (
                     SELECT
                         ISNULL(T0.UpdateTS, '')             AS MapDivisionID,
-                        CAST(0   AS DECIMAL(18,2))  AS AutoApprovalCreditLimit,
-                        CAST(0   AS DECIMAL(18,2))  AS AutoApprovalCreditLimitBal,
+                        CAST(0 AS DECIMAL(18,2))            AS AutoApprovalCreditLimit,
+                        CAST(0 AS DECIMAL(18,2))            AS AutoApprovalCreditLimitBal,
                         CAST('' AS NVARCHAR(200))           AS BPRemarks,
-                        CAST(0   AS DECIMAL(18,2))  AS CreditLimit,
+                        CAST(0 AS DECIMAL(18,2))            AS CreditLimit,
                         ISNULL(T0.City, '')                 AS Destination,
-                        CAST(0   AS DECIMAL(18,2))  AS DiscountPer,
-                        SB.DivisionCode                     AS DivisionCode,
-                        CAST(0   AS DECIMAL(18,2))  AS ExcessPer,
+                        CAST(0 AS DECIMAL(18,2))            AS DiscountPer,
+                        SB2.DivisionCode                    AS DivisionCode,
+                        CAST(0 AS DECIMAL(18,2))            AS ExcessPer,
                         REPLACE(T0.U_Grade,'Grade ','')     AS Grade,
-                        CAST(1  AS INT)                     AS IsActive,
-                        CAST(0  AS INT)                     AS IsOrderAutoApproval,
-                        CAST(0  AS INT)                     AS Outstandingdays,
+                        CAST(1 AS INT)                      AS IsActive,
+                        CAST(0 AS INT)                      AS IsOrderAutoApproval,
+                        CAST(0 AS INT)                      AS Outstandingdays,
                         ISNULL(T0.U_SalPriceCode, '')       AS PriceLisCode,
-                        CAST(0  AS INT)                     AS ShowLimit,
+                        CAST(0 AS INT)                      AS ShowLimit,
                         CAST('Uathayam' AS NVARCHAR(200))   AS TransporterName
+
+                    FROM (
+                        SELECT DISTINCT DivisionCode 
+                        FROM SubBrandMap
+                    ) SB2 
+
                     FOR JSON PATH
                 ) AS MST_MAP_BP_Division,
                 ------------------------------------------------------------------
@@ -722,19 +728,47 @@ async function getBPMasterData() {
                 ------------------------------------------------------------------
                 (
                     SELECT
-                        CntctCode AS ContactPersonID,
-                        Name AS ContactPersonName,
-                        ISNULL(Position,'proprietor') AS Designation,
-                        ISNULL(Cellolar,T0.Cellular) AS MobileNum,
-                        ISNULL(Cellolar,T0.Cellular) AS WhatsAppNum,
-                        E_MailL AS EmailID,
-                        CASE WHEN Active='Y' THEN 1 ELSE 0 END AS IsActive,
-                        SB.DivisionCode
+                        CntctCode                                  AS ContactPersonID,
+                        Name                                       AS ContactPersonName,
+                        ISNULL(Position, 'proprietor')             AS Designation,
+                        RIGHT(ISNULL(Cellolar, T0.Cellular), 10)              AS MobileNum,
+                        RIGHT(ISNULL(Cellolar, T0.Cellular), 10)              AS WhatsAppNum,
+                        E_MailL                                    AS EmailID,
+                        CASE WHEN Active = 'Y' THEN 1 ELSE 0 END  AS IsActive,
+                        CAST(0 AS INT)                             AS IsSendOverDueReminder,
+                        SB.DivisionCode                            AS DivisionCode,
+                        CAST(0 AS INT) AS PaymentSMS,
+                        CAST(0 AS INT) AS PaymentEmail,
+                        CAST(1 AS INT) AS PaymentWhatsapp,
+                        CAST(1 AS INT) AS OrderEmail,
+                        CAST(1 AS INT) AS OrderSMS,
+                        CAST(1 AS INT) AS OrderWhatsapp,
+                        CAST(1 AS INT) AS InvoiceWhatsapp,
+                        CAST(0 AS INT) AS InvoiceEmail,
+                        CAST(0 AS INT) AS InvoiceSMS,
+                        CAST(0 AS INT) AS PaymentRequestSMS,
+                        CAST(0 AS INT) AS PaymentRequestEmail,
+                        CAST(0 AS INT) AS PaymentrequestWhatsapp,
+                        CAST(0 AS INT) AS OutstandingSMS,
+                        CAST(0 AS INT) AS OutstandingEmail,
+                        CAST(0 AS INT) AS OutstandingWhatsapp,
+                        CAST(0 AS INT) AS PaycollectionWhatsapp,
+                        CAST(0 AS INT) AS DistributorWhatsapp
                     FROM [BBLive].[dbo].OCPR
                     WHERE CardCode = T0.CardCode
                     FOR JSON PATH
                 ) AS Map_BpContactDetails,
 
+                ------------------------------------------------------------------
+                -- BRAND JSON MST_MAP_BP_Brand (FOR JSON)
+                ------------------------------------------------------------------
+                (
+                    SELECT
+                        SB2.SubBrandName AS Brand,
+                        SB2.DivisionCode AS DivisionCode
+                    FROM SubBrandMap SB2  
+                    FOR JSON PATH
+                ) AS MST_MAP_BP_Brand,  
                 ------------------------------------------------------------------
                 -- SUB BRAND JSON
                 ------------------------------------------------------------------
@@ -786,8 +820,8 @@ async function getBPMasterData() {
                                 ELSE 0
                             END
                         AS DECIMAL(18,6)) AS DiscountPer,
-                        '2019-04-01' AS FromDate,
-                        '2030-03-31' AS ToDate
+                        CONVERT(VARCHAR(19), CAST('2019-04-01' AS DATETIME), 126) AS FromDate,
+                        CONVERT(VARCHAR(19), CAST('2030-03-31' AS DATETIME), 126) AS ToDate
                     FROM SubBrandMap SB3
                     FOR JSON PATH
                 ) AS Discount_BP_Division

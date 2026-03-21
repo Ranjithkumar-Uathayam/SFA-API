@@ -288,34 +288,6 @@ function mapToSchemePayload(rows) {
                 }
             });
         }
-        //const policy = policyMap.get(policyId).Policy;
-        // if (row.ProductCode) {
-        //     const dup = policy.SC_ProductMapping.some(
-        //         p => p.ProductCode === row.ProductCode && p.SizeCode === row.SizeCode && p.ColorCode === row.ColorCode
-        //     );
-        //     if (!dup) {
-        //         policy.SC_ProductMapping.push({
-        //             ProductCode         : row.ProductCode,
-        //             SizeCode            : row.SizeCode            ?? null,
-        //             ColorCode           : row.ColorCode           ?? null,
-        //             MinOrderQty         : row.MinOrderQty         ?? 0,
-        //             FreeQty             : row.FreeQty             ?? 0,
-        //             Applicability       : row.ProductApplicability ?? 'S',
-        //             AllowMultiplyFreeQty: row.AllowMultiplyFreeQty ?? 0,
-        //             MaxAllowedFreeQty   : row.MaxAllowedFreeQty   ?? 0,
-        //             IsActive            : row.ProductIsActive      ?? 1,
-        //             MappingStatus       : row.MappingStatus        ?? 1,
-        //             SC_ProdAlternate: [
-        //                 {
-        //                     ProductCode: null,
-        //                     SizeCode: null,
-        //                     ColorCode: null,
-        //                     IsActive: 0
-        //                 }
-        //             ]
-        //         });
-        //     }
-        // }
     }
     return Array.from(policyMap.values());
 }
@@ -369,7 +341,7 @@ function mapToBPPayload(rows) {
 
     for (const row of rows) {
         const bpCode = row.BPCode;
-
+        let MST_MAP_BP_Division = JSON.parse(row.MST_MAP_BP_Division)
         if (!bpMap.has(bpCode)) {
             bpMap.set(bpCode, {
                 BPCode          : row.BPCode,
@@ -383,68 +355,49 @@ function mapToBPPayload(rows) {
                 SR_BPCode       : row.SR_BPCode        ?? '',
                 GradeOfBP       : row.GradeOfBP        ?? '',
                 CustomerRemark  : row.CustomerRemark   ?? '',
-                Latitude        : row.Latitude         ?? 0.00,
-                Longitude       : row.Longitude        ?? 0.00,
+                Latitude        : decimal(row.Latitude)         ?? 0.00,
+                Longitude       : decimal(row.Longitude)        ?? 0.00,
                 AreaCode        : row.AreaCode         ?? '',
 
-                BillShipTo          : JSON.parse(row.BillShipTo),
-                Map_BpContactDetails    : JSON.parse(row.Map_BpContactDetails),
+                BillShipTo          : [],
+                Map_BpContactDetails    : [],
                 Discount_BP_Division: JSON.parse(row.Discount_BP_Division) ,
-                MST_MAP_BP_Division : JSON.parse(row.MST_MAP_BP_Division),
-                MST_MAP_BP_Brand    : JSON.parse(row.MST_Map_BP_SubBrand),
+                MST_MAP_BP_Division : MST_MAP_BP_Division.map(d => ({
+                                        ...d,
+                                        AutoApprovalCreditLimit   : decimal(d.AutoApprovalCreditLimit),
+                                        AutoApprovalCreditLimitBal: decimal(d.AutoApprovalCreditLimitBal),
+                                        CreditLimit               : decimal(d.CreditLimit),
+                                        DiscountPer               : decimal(d.DiscountPer),
+                                        ExcessPer                 : decimal(d.ExcessPer),
+                                    })),
+                MST_MAP_BP_Brand    : JSON.parse(row.MST_MAP_BP_Brand),
                 MST_Map_BP_SubBrand : JSON.parse(row.MST_Map_BP_SubBrand)
             });
         }
 
         const bp = bpMap.get(bpCode);
+        if (bp.BillShipTo.length === 0) {
+            for (const entry of parseBillShipTo(row.BillShipTo)) {
+                const isDup = bp.BillShipTo.some(
+                    b => b.BillShipID === entry.BillShipID && b.Type === entry.Type
+                );
+                if (!isDup) bp.BillShipTo.push(entry);
+            }
+        }
 
-        // if (bp.BillShipTo.length === 0) {
-        //     for (const entry of parseBillShipTo(row.BillShipTo)) {
-        //         const isDup = bp.BillShipTo.some(
-        //             b => b.BillShipID === entry.BillShipID && b.Type === entry.Type
-        //         );
-        //         if (!isDup) bp.BillShipTo.push(entry);
-        //     }
-        // }
-
-        // for (const c of safeParse(row.Map_BpContactDetails)) {
-        //     const isDup = bp.Map_BpContactDetails.some(
-        //         x => x.ContactPersonID === c.ContactPersonID && x.DivisionCode === c.DivisionCode
-        //     );
-        //     if (!isDup) bp.Map_BpContactDetails.push(c);
-        // }
-
-        // if (!bp.Discount_BP_Division.some(d => d.DivisionCode === row.DivisionCode)) {
-        //     console.log("******row.Discount_BP_Division",row.Discount_BP_Division)
-        //     bp.Discount_BP_Division.push(row.Discount_BP_Division)
-        // }
-
-        // for (const d of safeParse(row.MST_MAP_BP_Division)) {
-        //     if (!bp.MST_MAP_BP_Division.some(x => x.DivisionCode == d.DivisionCode))
-        //     bp.MST_MAP_BP_Division.push({
-        //         ...d,
-        //         AutoApprovalCreditLimitBal: decimal(d.AutoApprovalCreditLimitBal),
-        //         CreditLimit: decimal(d.CreditLimit),
-        //         ExcessPer: decimal(d.ExcessPer)
-        //     });
-        // }
-
-        // for (const b of safeParse(row.MST_MAP_BP_Brand)) {
-        //     if (!bp.MST_MAP_BP_Brand.some(x => x.Brand == b.Brand && x.DivisionCode == b.DivisionCode))
-        //         bp.MST_MAP_BP_Brand.push(b);
-        // }
-
-        // for (const s of safeParse(row.MST_Map_BP_SubBrand)) {
-        //     if (!bp.MST_Map_BP_SubBrand.some(x => x.SubBrandName == s.SubBrandName && x.DivisionCode == s.DivisionCode))
-        //         bp.MST_Map_BP_SubBrand.push(s);
-        // }
+        for (const c of safeParse(row.Map_BpContactDetails)) {
+            const isDup = bp.Map_BpContactDetails.some(
+                x => x.ContactPersonID === c.ContactPersonID && x.DivisionCode === c.DivisionCode
+            );
+            if (!isDup) bp.Map_BpContactDetails.push(c);
+        }
     }
 
     return { businessPartners: Array.from(bpMap.values()) };
 }
 
 function decimal(val) {
-    return parseFloat(Number(val ?? 0).toFixed(2));
+    return Number(val ?? 0).toFixed(2)
 }
 
 // ── Legacy helpers ────────────────────────────────────────────────────────────

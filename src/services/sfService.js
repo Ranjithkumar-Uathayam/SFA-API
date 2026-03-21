@@ -539,11 +539,11 @@ async function upsertBusinessPartners(payload) {
 
         try {
             console.log("*************body", JSON.stringify(body) )
-            // const response = await withRetry(
-            //     () => axios.post(url, body, { headers, timeout: REQ_TIMEOUT }),
-            //     code
-            // );
-            const response = {}
+            const response = await withRetry(
+                () => axios.post(url, body, { headers, timeout: REQ_TIMEOUT }),
+                code
+            );
+            
             verifySFResponse(response, code);
             summary.success.push({ code, status: response.status, data: response.data });
 

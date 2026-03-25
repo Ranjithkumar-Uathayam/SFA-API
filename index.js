@@ -14,7 +14,8 @@ app.post('/api/sync/products',          syncController.syncProducts);
 app.post('/api/sync/pricelists',        syncController.syncPriceLists);
 app.post('/api/sync/images',            syncController.syncImages);
 app.post('/api/sync/schemes',           syncController.syncSchemes);
-app.post('/api/sync/businesspartners',  syncController.syncBusinessPartners);  // ← NEW
+app.post('/api/sync/businesspartners',  syncController.syncBusinessPartners);  
+app.post('/api/sync/stockInventory',  syncController.syncStockInventory);
 
 // Health check
 app.get('/', (req, res) => {
@@ -25,7 +26,8 @@ app.get('/', (req, res) => {
         '  POST /api/sync/pricelists\n' +
         '  POST /api/sync/images\n' +
         '  POST /api/sync/schemes\n' +
-        '  POST /api/sync/businesspartners\n'
+        '  POST /api/sync/businesspartners\n' +
+        ' POST /api/sync/stockInventory'
     );
 });
 

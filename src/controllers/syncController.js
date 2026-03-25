@@ -368,3 +368,63 @@ exports.syncBusinessPartners = async (req, res) => {
         });
     }
 };
+
+exports.syncStockInventory = async (req, res) => {
+    const startTime = Date.now();
+    divider('BP SYNC START');
+
+    try {
+        log.info('Fetching BP master data from DB…');
+        const sqlData = await dbService.getStockData();
+        log.info(`Fetched ${sqlData.length} raw DB row(s) across all sub-brand passes`);
+
+        if (!sqlData.length) {
+            log.warn('No BP data found in DB.');
+            return res.status(200).json({ message: 'No BP data found.' });
+        }
+        console.log("*************sqlData", sqlData )
+        const payload  = mapper.mapToBPPayload(sqlData);
+        const totalStocks = payload.length;
+        log.info(`Mapped to ${totalStocks} unique Stock`);
+
+        if (totalStocks === 0) {
+            log.warn('Mapper produced 0 Stocks — nothing to sync.');
+            return res.status(200).json({ message: 'No valid Stocks data to sync.' });
+        }
+
+        // // Log a sample of the first 3 BPs
+       
+        const sfResult = await sfService.upsertStockInventory(payload);
+
+        // divider('BP SYNC COMPLETE');
+        // log.ok (`Elapsed          : ${elapsed(startTime)}`);
+        // log.info(`DB rows fetched  : ${sqlData.length}`);
+        // log.info(`BPs mapped       : ${totalBPs}`);
+        // log.ok  (`SF success       : ${sfResult.successRecords}`);
+        // if (sfResult.failedRecords > 0) {
+        //     log.error(`SF failed        : ${sfResult.failedRecords}`);
+        // }
+        // divider();
+
+        // return res.status(200).json({
+        //     message       : sfResult.failedRecords === 0
+        //         ? 'Business Partner Sync Completed Successfully'
+        //         : 'Business Partner Sync Completed with some failures',
+        //     elapsedSeconds: parseFloat(((Date.now() - startTime) / 1000).toFixed(2)),
+        //     dbRowsFetched : sqlData.length,
+        //     bpsMapped     : totalBPs,
+        //     ...sfResult
+        // });
+
+    } catch (err) {
+        divider('BP SYNC ERROR');
+        log.error(`Sync failed after ${elapsed(startTime)}: ${err.message}`);
+        divider();
+        return res.status(500).json({
+            message       : 'Business Partner Sync Failed',
+            elapsedSeconds: parseFloat(((Date.now() - startTime) / 1000).toFixed(2)),
+            error         : err.message,
+            details       : err.response?.data ?? null
+        });
+    }
+};

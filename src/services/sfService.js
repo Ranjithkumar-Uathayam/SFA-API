@@ -589,6 +589,98 @@ async function upsertBusinessPartners(payload) {
     };
 }
 
+
+async function upsertStockInventory(payload) {
+    const stockInventory = payload;
+
+    if (!Array.isArray(stockInventory) || stockInventory.length === 0) {
+        log.warn('upsertstockInventory: nothing to send.');
+        return { message: 'No Stock Inventory to upsert.' };
+    }
+
+    const token = await getSalesforceToken();
+
+    let url = process.env.SF_API_URL_Stock;
+    if (!url && process.env.SF_API_URL_Stock) {
+        url = process.env.SF_API_URL_Stock.replace('ProductUpsertAPI', '/data/v63.0/composite/graph');
+        log.info(`Derived Stock URL: ${url}`);
+    }
+
+    url = buildSalesforceUrl(url, instanceUrl);
+
+    if (!url) throw new Error('SF_API_URL_BusinessPartner is not set in .env');
+
+    const headers = {
+        'Content-Type': 'application/json',
+        Authorization : `Bearer ${token}`
+    };
+
+    const total   = stockInventory.length;
+    const summary = { success: [], failed: [] };
+
+    log.divider('BP UPSERT START');
+    log.info(`Total BPs        : ${total}`);
+    log.info(`Concurrency      : ${CONCURRENCY}`);
+    log.info(`Max retries/item : ${MAX_RETRIES}`);
+    log.info(`Endpoint         : ${url}`);
+    log.info(`Mode             : 1 BP per request (SF limit)`);
+    log.divider();
+
+    const tasks = stockInventory.map((bp, idx) => async () => {
+        const code = bp.BPCode ?? `IDX-${idx}`;
+        const body = { stockInventory: [bp] };
+
+        try {
+            const response = await withRetry(
+                () => axios.post(url, body, { headers, timeout: REQ_TIMEOUT }),
+                code
+            );
+            
+            verifySFResponse(response, code);
+            summary.success.push({ code, status: response.status, data: response.data });
+
+            const done = summary.success.length + summary.failed.length;
+            log.ok(`[${done}/${total}] [${code}] HTTP ${response.status} — OK`);
+
+        } catch (err) {
+            const status  = err.response?.status ?? 'N/A';
+            const errBody = err.response?.data   ?? err.message;
+            summary.failed.push({ code, status, error: errBody });
+
+            const done = summary.success.length + summary.failed.length;
+            log.error(`[${done}/${total}] [${code}] HTTP ${status} — FAILED`);
+            log.error(`  Detail: ${JSON.stringify(errBody)}`);
+        }
+
+        const done = summary.success.length + summary.failed.length;
+        if (done % 10 === 0 || done === total) log.progress(done, total, 'BPs');
+    });
+
+    await runWithConcurrency(tasks, CONCURRENCY);
+
+    log.divider('BP UPSERT SUMMARY');
+    log.info(`Total Sent : ${total}`);
+    log.ok  (`Success    : ${summary.success.length}`);
+    if (summary.failed.length > 0) {
+        log.error(`Failed     : ${summary.failed.length}`);
+        summary.failed.forEach(f =>
+            log.warn(`  • [${f.code}] HTTP ${f.status} — ${JSON.stringify(f.error)}`)
+        );
+    }
+    log.divider();
+
+    if (summary.success.length === 0 && summary.failed.length > 0) {
+        throw new Error(`All ${summary.failed.length} BP upsert(s) failed.`);
+    }
+
+    return {
+        totalBPs      : total,
+        successRecords: summary.success.length,
+        failedRecords : summary.failed.length,
+        failedDetails : summary.failed
+    };
+}
+
 module.exports = {
     upsertProducts,
     upsertPriceLists,

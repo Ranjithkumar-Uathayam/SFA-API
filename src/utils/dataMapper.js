@@ -426,6 +426,39 @@ function buildPayload(product) {
     };
 }
 
+function mapToStockPayload(rows) {
+    if (!rows || rows.length === 0) return { businessPartners: [] };
+
+        const stockData = []
+
+        for (const row of rows) {
+        {
+            stockData.push({
+                "method": "PATCH",
+                "url": `/services/data/v60.0/sobjects/dmpl__AccountStock__c/ExternalId__c/Stock${row.ExternalId}`,
+                "referenceId": "AccountStock01",
+                "body": {
+                    "ProductMappingId__c": row.ProductMappingId,
+                    "ProductCode__c": row.ProductCode,
+                    "ColorCode__c": row.ColorCode,
+                    "AttributeValue__c": row.AttributeValue,
+                    "StyleCode__c": row.StyleCode,
+                    "Size__c": row.Size,
+                    "StockQuantity__c": row.StockQuantity,
+                    "Type__c": row.Type,
+                    "IsActive__c": row.IsActive,
+                
+                    "StockHighlightMessageDetails__c": row.StockHighlightMessageDetails,
+                    "StockMessage__c": row.StockMessage
+                }
+            })
+        }
+        
+    }
+
+    return { stockData };
+}
+
 module.exports = {
     mapToSalesforcePayload,
     mapToPriceListPayload,
@@ -433,5 +466,6 @@ module.exports = {
     mapToSchemePayload,
     mapToBPPayload,
     groupByProduct,
-    buildPayload
+    buildPayload,
+    mapToStockPayload
 };

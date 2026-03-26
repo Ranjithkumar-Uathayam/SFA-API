@@ -605,7 +605,7 @@ async function getStockData() {
             FROM [BBLive].[dbo].OITM AS t0
             INNER JOIN [BBLive].[dbo].OITW AS t1 ON t0.ItemCode = t1.ItemCode
             WHERE t1.WhsCode = 'ASRS' 
-            AND t0.ItemCode = 'ETOSP32TR15501'
+            AND t0.ItemCode = 'ZURTR15301'
             ORDER BY t0.ItemCode
         `;
 

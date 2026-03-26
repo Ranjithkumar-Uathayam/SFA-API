@@ -589,95 +589,127 @@ async function upsertBusinessPartners(payload) {
     };
 }
 
-
 async function upsertStockInventory(payload) {
-    const stockInventory = payload;
-
-    if (!Array.isArray(stockInventory) || stockInventory.length === 0) {
-        log.warn('upsertstockInventory: nothing to send.');
+    // payload = { graphs: [...] }
+    if (!payload || !Array.isArray(payload.graphs) || payload.graphs.length === 0) {
+        log.warn('upsertStockInventory: nothing to send.');
         return { message: 'No Stock Inventory to upsert.' };
     }
-
+ 
     const token = await getSalesforceToken();
-
+ 
+    // ── URL resolution ────────────────────────────────────────────────────────
+    // Prefer an explicit SF_API_URL_Stock env var.
+    // Fallback: derive from SF_API_URL_ProductMaster by replacing the
+    //           Apex REST path with the standard Composite Graph path.
     let url = process.env.SF_API_URL_Stock;
-    if (!url && process.env.SF_API_URL_Stock) {
-        url = process.env.SF_API_URL_Stock.replace('ProductUpsertAPI', '/data/v63.0/composite/graph');
+    if (!url && process.env.SF_API_URL_ProductMaster) {
+        url = process.env.SF_API_URL_ProductMaster
+            .replace(/\/apexrest\/.*$/i, '/data/v60.0/composite/graph');
         log.info(`Derived Stock URL: ${url}`);
     }
-
     url = buildSalesforceUrl(url, instanceUrl);
-
-    if (!url) throw new Error('SF_API_URL_BusinessPartner is not set in .env');
-
+ 
+    if (!url) throw new Error('SF_API_URL_Stock is not set in .env');
+ 
     const headers = {
         'Content-Type': 'application/json',
         Authorization : `Bearer ${token}`
     };
-
-    const total   = stockInventory.length;
+ 
+    const MAX_GRAPHS_PER_REQUEST = 25; // SF limit
+    const allGraphs  = payload.graphs;
+    const totalGraphs = allGraphs.length;
+    const totalRequests = allGraphs.reduce((n, g) => n + g.compositeRequest.length, 0);
     const summary = { success: [], failed: [] };
-
-    log.divider('BP UPSERT START');
-    log.info(`Total BPs        : ${total}`);
-    log.info(`Concurrency      : ${CONCURRENCY}`);
-    log.info(`Max retries/item : ${MAX_RETRIES}`);
-    log.info(`Endpoint         : ${url}`);
-    log.info(`Mode             : 1 BP per request (SF limit)`);
+ 
+    log.divider('STOCK UPSERT START');
+    log.info(`Total subrequests : ${totalRequests}`);
+    log.info(`Total graphs      : ${totalGraphs}`);
+    log.info(`Endpoint          : ${url}`);
     log.divider();
-
-    const tasks = stockInventory.map((bp, idx) => async () => {
-        const code = bp.BPCode ?? `IDX-${idx}`;
-        const body = { stockInventory: [bp] };
-
+ 
+    // Split graphs into batches of ≤25 (SF limit per POST)
+    for (let i = 0; i < allGraphs.length; i += MAX_GRAPHS_PER_REQUEST) {
+        const graphBatch  = allGraphs.slice(i, i + MAX_GRAPHS_PER_REQUEST);
+        const batchNum    = Math.floor(i / MAX_GRAPHS_PER_REQUEST) + 1;
+        const totalBatches = Math.ceil(allGraphs.length / MAX_GRAPHS_PER_REQUEST);
+        const batchBody   = { graphs: graphBatch };
+        const recordCount = graphBatch.reduce((n, g) => n + g.compositeRequest.length, 0);
+ 
+        log.info(`Batch ${batchNum}/${totalBatches} — ${graphBatch.length} graph(s), ${recordCount} subrequest(s)`);
+ 
         try {
             const response = await withRetry(
-                () => axios.post(url, body, { headers, timeout: REQ_TIMEOUT }),
-                code
+                () => axios.post(url, batchBody, { headers, timeout: REQ_TIMEOUT }),
+                `STOCK-BATCH-${batchNum}`
             );
-            
-            verifySFResponse(response, code);
-            summary.success.push({ code, status: response.status, data: response.data });
-
-            const done = summary.success.length + summary.failed.length;
-            log.ok(`[${done}/${total}] [${code}] HTTP ${response.status} — OK`);
-
+ 
+            // Composite Graph returns 200 even on partial failures.
+            // Inspect each graph's isSuccessful flag.
+            const responseGraphs = response.data?.graphs ?? [];
+            let batchOk = true;
+ 
+            for (const gResult of responseGraphs) {
+                if (!gResult.isSuccessful) {
+                    batchOk = false;
+                    log.error(`Graph [${gResult.graphId}] FAILED:`);
+                    log.error(`  ${JSON.stringify(gResult.graphResponse)}`);
+                    summary.failed.push({
+                        batch  : batchNum,
+                        graphId: gResult.graphId,
+                        error  : gResult.graphResponse
+                    });
+                } else {
+                    log.ok(`Graph [${gResult.graphId}] — OK`);
+                    summary.success.push({ batch: batchNum, graphId: gResult.graphId });
+                }
+            }
+ 
+            // If SF returned no graph results, fall back to HTTP status check
+            if (responseGraphs.length === 0) {
+                verifySFResponse(response, `STOCK-BATCH-${batchNum}`);
+                summary.success.push({ batch: batchNum, graphId: 'UpsertStock', count: recordCount });
+                log.ok(`Batch ${batchNum}/${totalBatches} — HTTP ${response.status} — ${recordCount} records OK`);
+            }
+ 
         } catch (err) {
-            const status  = err.response?.status ?? 'N/A';
-            const errBody = err.response?.data   ?? err.message;
-            summary.failed.push({ code, status, error: errBody });
-
-            const done = summary.success.length + summary.failed.length;
-            log.error(`[${done}/${total}] [${code}] HTTP ${status} — FAILED`);
-            log.error(`  Detail: ${JSON.stringify(errBody)}`);
+            const status = err.response?.status ?? 'N/A';
+            const body   = err.response?.data   ?? err.message;
+            summary.failed.push({ batch: batchNum, status, error: body });
+            log.error(`Batch ${batchNum}/${totalBatches} — HTTP ${status} — FAILED`);
+            log.error(`  Detail: ${JSON.stringify(body)}`);
         }
-
-        const done = summary.success.length + summary.failed.length;
-        if (done % 10 === 0 || done === total) log.progress(done, total, 'BPs');
-    });
-
-    await runWithConcurrency(tasks, CONCURRENCY);
-
-    log.divider('BP UPSERT SUMMARY');
-    log.info(`Total Sent : ${total}`);
-    log.ok  (`Success    : ${summary.success.length}`);
+ 
+        log.progress(i + graphBatch.length, allGraphs.length, 'graphs');
+ 
+        // Small pause between batches
+        if (i + MAX_GRAPHS_PER_REQUEST < allGraphs.length) {
+            await sleep(300);
+        }
+    }
+ 
+    log.divider('STOCK UPSERT SUMMARY');
+    log.info(`Total subrequests : ${totalRequests}`);
+    log.ok  (`Graphs success    : ${summary.success.length}`);
     if (summary.failed.length > 0) {
-        log.error(`Failed     : ${summary.failed.length}`);
+        log.error(`Graphs failed     : ${summary.failed.length}`);
         summary.failed.forEach(f =>
-            log.warn(`  • [${f.code}] HTTP ${f.status} — ${JSON.stringify(f.error)}`)
+            log.warn(`  • Batch ${f.batch} | Graph: ${f.graphId ?? 'N/A'} — ${JSON.stringify(f.error)}`)
         );
     }
     log.divider();
-
+ 
     if (summary.success.length === 0 && summary.failed.length > 0) {
-        throw new Error(`All ${summary.failed.length} BP upsert(s) failed.`);
+        throw new Error(`All ${summary.failed.length} stock graph(s) failed.`);
     }
-
+ 
     return {
-        totalBPs      : total,
-        successRecords: summary.success.length,
-        failedRecords : summary.failed.length,
-        failedDetails : summary.failed
+        totalSubrequests: totalRequests,
+        totalGraphs,
+        successGraphs   : summary.success.length,
+        failedGraphs    : summary.failed.length,
+        failedDetails   : summary.failed
     };
 }
 
@@ -686,5 +718,6 @@ module.exports = {
     upsertPriceLists,
     uploadImages,
     upsertSchemes,
-    upsertBusinessPartners
+    upsertBusinessPartners,
+    upsertStockInventory
 };

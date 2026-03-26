@@ -39,4 +39,5 @@ app.listen(PORT, () => {
     console.log(` - POST /api/sync/images`);
     console.log(` - POST /api/sync/schemes`);
     console.log(` - POST /api/sync/businesspartners`);
+    console.log(` - POST /api/sync/stockInventory`);
 });

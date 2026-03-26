@@ -134,17 +134,10 @@ function mapToSalesforcePayload(rows) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRICE LIST MAPPER
-//
-// Changes vs previous version:
-//   1. PriceID    — passed through from row.PriceID (ROW_NUMBER in SQL).
-//   2. EffectiveFrom / EffectiveTo — taken directly from DB strings.
-//                  SQL guarantees a non-null ISO datetime string via ISNULL
-//                  fallback, so no extra defaulting needed here.
 // ─────────────────────────────────────────────────────────────────────────────
 function mapToPriceListPayload(sqlRows) {
     if (!sqlRows || sqlRows.length === 0) return [];
 
-    // productCode → priceListId → priceList entry
     const productMap = new Map();
 
     for (const row of sqlRows) {
@@ -163,8 +156,8 @@ function mapToPriceListPayload(sqlRows) {
                 SubBrandCode : row.SubBrandCode  ?? null,
                 BPProductName: row.BPProductName ?? productCode,
                 PriceLisCode : row.PriceListCode ?? null,
-                EffectiveFrom: row.EffectiveFrom ?? '2025-01-01T00:00:00',   
-                EffectiveTo  : row.EffectiveTo   ?? '2055-12-31T00:00:00',   
+                EffectiveFrom: row.EffectiveFrom ?? '2025-01-01T00:00:00',
+                EffectiveTo  : row.EffectiveTo   ?? '2055-12-31T00:00:00',
                 IsActive     : row.PriceListIsActive ?? 1,
                 Prices       : []
             });
@@ -172,11 +165,10 @@ function mapToPriceListPayload(sqlRows) {
 
         const entry = priceListMap.get(priceListId);
 
-        // Deduplicate by BPCategory — each category gets one Prices entry.
         if (!entry.Prices.some(p => p.BPCategory === row.BPCategory)) {
             entry.Prices.push({
                 PriceListID: priceListId,
-                PriceID    : row.PriceID    ?? null,   // ← new field
+                PriceID    : row.PriceID    ?? null,
                 BPCategory : row.BPCategory ?? null,
                 Price      : row.Price      ?? 0,
                 MRP        : row.MRP        ?? 0,
@@ -267,17 +259,9 @@ function mapToSchemePayload(rows) {
                     DiscountPer                : row.DiscountPer,
                     SC_BpCategoryMapping       : JSON.parse(row.SC_BpCategoryMapping),
                     StateMapping               : JSON.parse(row.StateMapping),
-                    RoleMapping                : [
-                                                    {
-                                                        "Role": "RBM"
-                                                    }
-                                                ],//JSON.parse(row.RoleMapping),
+                    RoleMapping                : [{ "Role": "RBM" }],
                     SC_BpExclution             : JSON.parse(row.SC_BpExclution),
-                    SC_BpInclution             :[
-                                                    {
-                                                        "BPCode": null
-                                                    }
-                                                ],//JSON.parse(row.SC_BpInclution),
+                    SC_BpInclution             : [{ "BPCode": null }],
                     SC_ProductMapping          : JSON.parse(row.SC_ProductMapping),
                     SC_ProdGroupMapping        : JSON.parse(row.SC_ProdGroupMapping),
                     SC_ProdAlternate           : JSON.parse(row.SC_ProdAlternate),
@@ -341,7 +325,7 @@ function mapToBPPayload(rows) {
 
     for (const row of rows) {
         const bpCode = row.BPCode;
-        let MST_MAP_BP_Division = JSON.parse(row.MST_MAP_BP_Division)
+        let MST_MAP_BP_Division = JSON.parse(row.MST_MAP_BP_Division);
         if (!bpMap.has(bpCode)) {
             bpMap.set(bpCode, {
                 BPCode          : row.BPCode,
@@ -361,7 +345,7 @@ function mapToBPPayload(rows) {
 
                 BillShipTo          : [],
                 Map_BpContactDetails    : [],
-                Discount_BP_Division: JSON.parse(row.Discount_BP_Division) ,
+                Discount_BP_Division: JSON.parse(row.Discount_BP_Division),
                 MST_MAP_BP_Division : MST_MAP_BP_Division.map(d => ({
                                         ...d,
                                         AutoApprovalCreditLimit   : decimal(d.AutoApprovalCreditLimit),
@@ -397,7 +381,7 @@ function mapToBPPayload(rows) {
 }
 
 function decimal(val) {
-    return Number(val ?? 0).toFixed(2)
+    return Number(val ?? 0).toFixed(2);
 }
 
 // ── Legacy helpers ────────────────────────────────────────────────────────────
@@ -426,37 +410,46 @@ function buildPayload(product) {
     };
 }
 
+const GRAPH_CHUNK_SIZE = 500; // SF max subrequests per graph
+
 function mapToStockPayload(rows) {
-    if (!rows || rows.length === 0) return { businessPartners: [] };
+    if (!rows || rows.length === 0) return { graphs: [] };
 
-        const stockData = []
-
-        for (const row of rows) {
-        {
-            stockData.push({
-                "method": "PATCH",
-                "url": `/services/data/v60.0/sobjects/dmpl__AccountStock__c/ExternalId__c/Stock${row.ExternalId}`,
-                "referenceId": "AccountStock01",
-                "body": {
-                    "ProductMappingId__c": row.ProductMappingId,
-                    "ProductCode__c": row.ProductCode,
-                    "ColorCode__c": row.ColorCode,
-                    "AttributeValue__c": row.AttributeValue,
-                    "StyleCode__c": row.StyleCode,
-                    "Size__c": row.Size,
-                    "StockQuantity__c": row.StockQuantity,
-                    "Type__c": row.Type,
-                    "IsActive__c": row.IsActive,
-                
-                    "StockHighlightMessageDetails__c": row.StockHighlightMessageDetails,
-                    "StockMessage__c": row.StockMessage
-                }
-            })
+    // Build all composite subrequests
+    const allRequests = rows.map((row, idx) => ({
+        method     : 'PATCH',
+        url        : `/services/data/v60.0/sobjects/dmpl__AccountStock__c/ExternalId__c/Stock${row.ExternalId}`,
+        referenceId: `AccountStock${String(idx + 1).padStart(2, '0')}`,
+        body       : {
+            ProductMappingId__c              : row.ProductMappingId,
+            ProductCode__c                   : row.ProductCode,
+            ColorCode__c                     : row.ColorCode,
+            AttributeValue__c                : row.AttributeValue,
+            StyleCode__c                     : row.StyleCode,
+            Size__c                          : row.Size,
+            StockQuantity__c                 : String(row.StockQuantity),   // SF expects string
+            Type__c                          : row.Type,
+            IsActive__c                      : Boolean(row.IsActive),
+            StockHighlightMessageDetails__c  : row.StockHighlightMessageDetails,
+            StockMessage__c                  : row.StockMessage
         }
-        
+    }));
+
+    // Split into graphs of max GRAPH_CHUNK_SIZE subrequests each
+    const graphs = [];
+    for (let i = 0; i < allRequests.length; i += GRAPH_CHUNK_SIZE) {
+        const chunk   = allRequests.slice(i, i + GRAPH_CHUNK_SIZE);
+        const graphId = graphs.length === 0
+            ? 'UpsertStock'
+            : `UpsertStock_${graphs.length + 1}`;
+
+        graphs.push({
+            graphId         : graphId,
+            compositeRequest: chunk
+        });
     }
 
-    return { stockData };
+    return { graphs };
 }
 
 module.exports = {

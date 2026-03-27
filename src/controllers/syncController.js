@@ -383,49 +383,41 @@ exports.syncStockInventory = async (req, res) => {
             return res.status(200).json({ message: 'No stock data found.' });
         }
  
-        // ── Map to SF Composite Graph payload ─────────────────────────────────
-        const payload = mapper.mapToStockPayload(sqlData);
-        const totalGraphs    = payload.graphs.length;
-        const totalSubrequests = payload.graphs.reduce(
-            (n, g) => n + g.compositeRequest.length, 0
-        );
+        const payload = mapper.mapToStockPayload(sqlData);   // flat array
+        log.info(`Mapped to ${payload.length} stock record(s)`);
  
-        log.info(`Mapped to ${totalSubrequests} subrequest(s) across ${totalGraphs} graph(s)`);
- 
-        if (totalSubrequests === 0) {
+        if (payload.length === 0) {
             log.warn('Mapper produced 0 records — nothing to sync.');
             return res.status(200).json({ message: 'No valid stock data to sync.' });
         }
  
-        // Log a sample of the first 3 subrequests
-        const firstGraph = payload.graphs[0]?.compositeRequest ?? [];
-        firstGraph.slice(0, 3).forEach((r, i) =>
+        // Log a sample of the first 3 records
+        payload.slice(0, 3).forEach((r, i) =>
             log.info(
-                `  [${i + 1}] referenceId: ${r.referenceId} | ` +
-                `ProductCode: ${r.body.ProductCode__c} | ` +
-                `Color: ${r.body.ColorCode__c} | ` +
-                `Qty: ${r.body.StockQuantity__c}`
+                `  [${i + 1}] ProductCode: ${r.ProductCode} | ` +
+                `Color: ${r.ColorCode} | Qty: ${r.StockQuantity} | ` +
+                `Active: ${r.IsActive}`
             )
         );
-        console.log("**************upsertStockInventory", JSON.stringify(payload))
+ 
         const sfResult = await sfService.upsertStockInventory(payload);
  
         divider('STOCK INVENTORY SYNC COMPLETE');
-        log.ok (`Elapsed             : ${elapsed(startTime)}`);
-        log.info(`DB rows fetched     : ${sqlData.length}`);
-        log.info(`Total subrequests   : ${sfResult.totalSubrequests}`);
-        log.ok  (`Graphs success      : ${sfResult.successGraphs}`);
-        if (sfResult.failedGraphs > 0) {
-            log.error(`Graphs failed       : ${sfResult.failedGraphs}`);
+        log.ok (`Elapsed           : ${elapsed(startTime)}`);
+        log.info(`DB rows fetched   : ${sqlData.length}`);
+        log.info(`Records sent      : ${sfResult.totalRecords}`);
+        log.ok  (`Success           : ${sfResult.successRecords}`);
+        if (sfResult.failedRecords > 0) {
+            log.error(`Failed            : ${sfResult.failedRecords}`);
         }
         divider();
  
         return res.status(200).json({
-            message: sfResult.failedGraphs === 0
+            message: sfResult.failedBatches === 0
                 ? 'Stock Inventory Sync Completed Successfully'
                 : 'Stock Inventory Sync Completed with some failures',
-            elapsedSeconds  : parseFloat(((Date.now() - startTime) / 1000).toFixed(2)),
-            dbRowsFetched   : sqlData.length,
+            elapsedSeconds: parseFloat(((Date.now() - startTime) / 1000).toFixed(2)),
+            dbRowsFetched : sqlData.length,
             ...sfResult
         });
  
@@ -441,4 +433,3 @@ exports.syncStockInventory = async (req, res) => {
         });
     }
 };
-

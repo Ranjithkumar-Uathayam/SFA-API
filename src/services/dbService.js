@@ -568,7 +568,6 @@ async function getBPMasterData() {
             AND T0.validFor = 'Y'
             AND T0.U_AreaCode != ''
             AND ISNULL(CAST(T0.U_GSTIN AS NVARCHAR(MAX)), '') NOT IN ('UNREGISTERED','')
-            AND T0.CardCode = 'C036447'
 
             ORDER BY T0.CardCode, SB.DivisionCode, SB.SubBrandName`
 
@@ -605,7 +604,7 @@ async function getStockData() {
             FROM [BBLive].[dbo].OITM AS t0
             INNER JOIN [BBLive].[dbo].OITW AS t1 ON t0.ItemCode = t1.ItemCode
             WHERE t1.WhsCode = 'ASRS' 
-            AND t0.ItemCode = 'ZURTR15301'
+            and T0.ValidFor = 'Y'
             ORDER BY t0.ItemCode
         `;
 

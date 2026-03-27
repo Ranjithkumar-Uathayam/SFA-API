@@ -1,3 +1,29 @@
+if (!AbortSignal.any) {
+    AbortSignal.any = function (signals) {
+        const controller = new AbortController();
+
+        function onAbort() {
+            controller.abort();
+            cleanup();
+        }
+
+        function cleanup() {
+            for (const s of signals) {
+                s.removeEventListener("abort", onAbort);
+            }
+        }
+
+        for (const s of signals) {
+            s.addEventListener("abort", onAbort);
+        }
+
+        if (signals.some(s => s.aborted)) {
+            controller.abort();
+        }
+
+        return controller.signal;
+    };
+}
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();

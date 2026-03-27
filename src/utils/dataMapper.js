@@ -410,46 +410,29 @@ function buildPayload(product) {
     };
 }
 
-const GRAPH_CHUNK_SIZE = 500; // SF max subrequests per graph
-
+// ─────────────────────────────────────────────────────────────────────────────
+// STOCK INVENTORY MAPPER
+//
+// Converts flat SQL rows into the Apex REST bulkAccountStockUpsert format.
+// Endpoint : POST /services/apexrest/bulkAccountStockUpsert
+// Payload  : flat JSON array — one object per stock row.
+// ─────────────────────────────────────────────────────────────────────────────
 function mapToStockPayload(rows) {
-    if (!rows || rows.length === 0) return { graphs: [] };
+    if (!rows || rows.length === 0) return [];
 
-    // Build all composite subrequests
-    const allRequests = rows.map((row, idx) => ({
-        method     : 'PATCH',
-        url        : `/services/data/v60.0/sobjects/dmpl__AccountStock__c/ExternalId__c/Stock${row.ExternalId}`,
-        referenceId: `AccountStock${String(idx + 1).padStart(2, '0')}`,
-        body       : {
-            ProductMappingId__c              : row.ProductMappingId,
-            ProductCode__c                   : row.ProductCode,
-            ColorCode__c                     : row.ColorCode,
-            AttributeValue__c                : row.AttributeValue,
-            StyleCode__c                     : row.StyleCode,
-            Size__c                          : row.Size,
-            StockQuantity__c                 : String(row.StockQuantity),   // SF expects string
-            Type__c                          : row.Type,
-            IsActive__c                      : Boolean(row.IsActive),
-            StockHighlightMessageDetails__c  : row.StockHighlightMessageDetails,
-            StockMessage__c                  : row.StockMessage
-        }
+    return rows.map(row => ({
+        ProductMappingId             : String(row.ProductMappingId),
+        ProductCode                  : row.ProductCode,
+        ColorCode                    : row.ColorCode,
+        AttributeValue               : row.AttributeValue,
+        StyleCode                    : row.StyleCode,
+        Size                         : row.Size,
+        StockQuantity                : Number(row.StockQuantity),
+        Type                         : row.Type,
+        IsActive                     : Boolean(row.IsActive),
+        StockHighlightMessageDetails : row.StockHighlightMessageDetails,
+        StockMessage                 : row.StockMessage
     }));
-
-    // Split into graphs of max GRAPH_CHUNK_SIZE subrequests each
-    const graphs = [];
-    for (let i = 0; i < allRequests.length; i += GRAPH_CHUNK_SIZE) {
-        const chunk   = allRequests.slice(i, i + GRAPH_CHUNK_SIZE);
-        const graphId = graphs.length === 0
-            ? 'UpsertStock'
-            : `UpsertStock_${graphs.length + 1}`;
-
-        graphs.push({
-            graphId         : graphId,
-            compositeRequest: chunk
-        });
-    }
-
-    return { graphs };
 }
 
 module.exports = {

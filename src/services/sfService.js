@@ -589,9 +589,12 @@ async function upsertBusinessPartners(payload) {
     };
 }
 
+const STOCK_BATCH_SIZE  = parseInt(process.env.SF_BATCH_SIZE_STOCK,    10) || 200;
+const STOCK_BATCH_DELAY = parseInt(process.env.SF_STOCK_BATCH_DELAY_MS,10) || 300;
+ 
 async function upsertStockInventory(payload) {
-    // payload = { graphs: [...] }
-    if (!payload || !Array.isArray(payload.graphs) || payload.graphs.length === 0) {
+    // payload = flat array from mapToStockPayload
+    if (!Array.isArray(payload) || payload.length === 0) {
         log.warn('upsertStockInventory: nothing to send.');
         return { message: 'No Stock Inventory to upsert.' };
     }
@@ -599,13 +602,10 @@ async function upsertStockInventory(payload) {
     const token = await getSalesforceToken();
  
     // ── URL resolution ────────────────────────────────────────────────────────
-    // Prefer an explicit SF_API_URL_Stock env var.
-    // Fallback: derive from SF_API_URL_ProductMaster by replacing the
-    //           Apex REST path with the standard Composite Graph path.
     let url = process.env.SF_API_URL_Stock;
     if (!url && process.env.SF_API_URL_ProductMaster) {
         url = process.env.SF_API_URL_ProductMaster
-            .replace(/\/apexrest\/.*$/i, '/data/v60.0/composite/graph');
+            .replace(/\/apexrest\/.*$/i, '/apexrest/bulkAccountStockUpsert');
         log.info(`Derived Stock URL: ${url}`);
     }
     url = buildSalesforceUrl(url, instanceUrl);
@@ -617,99 +617,75 @@ async function upsertStockInventory(payload) {
         Authorization : `Bearer ${token}`
     };
  
-    const MAX_GRAPHS_PER_REQUEST = 25; // SF limit
-    const allGraphs  = payload.graphs;
-    const totalGraphs = allGraphs.length;
-    const totalRequests = allGraphs.reduce((n, g) => n + g.compositeRequest.length, 0);
-    const summary = { success: [], failed: [] };
+    const total      = payload.length;
+    const totalBatch = Math.ceil(total / STOCK_BATCH_SIZE);
+    const summary    = { success: [], failed: [] };
  
     log.divider('STOCK UPSERT START');
-    log.info(`Total subrequests : ${totalRequests}`);
-    log.info(`Total graphs      : ${totalGraphs}`);
-    log.info(`Endpoint          : ${url}`);
+    log.info(`Total records    : ${total}`);
+    log.info(`Batch size       : ${STOCK_BATCH_SIZE}`);
+    log.info(`Total batches    : ${totalBatch}`);
+    log.info(`Endpoint         : ${url}`);
     log.divider();
  
-    // Split graphs into batches of ≤25 (SF limit per POST)
-    for (let i = 0; i < allGraphs.length; i += MAX_GRAPHS_PER_REQUEST) {
-        const graphBatch  = allGraphs.slice(i, i + MAX_GRAPHS_PER_REQUEST);
-        const batchNum    = Math.floor(i / MAX_GRAPHS_PER_REQUEST) + 1;
-        const totalBatches = Math.ceil(allGraphs.length / MAX_GRAPHS_PER_REQUEST);
-        const batchBody   = { graphs: graphBatch };
-        const recordCount = graphBatch.reduce((n, g) => n + g.compositeRequest.length, 0);
+    for (let batchIdx = 0; batchIdx < totalBatch; batchIdx++) {
+        const batch    = payload.slice(batchIdx * STOCK_BATCH_SIZE, (batchIdx + 1) * STOCK_BATCH_SIZE);
+        const batchNum = batchIdx + 1;
+        const range    = `records ${batchIdx * STOCK_BATCH_SIZE + 1}–${Math.min((batchIdx + 1) * STOCK_BATCH_SIZE, total)}`;
  
-        log.info(`Batch ${batchNum}/${totalBatches} — ${graphBatch.length} graph(s), ${recordCount} subrequest(s)`);
+        log.info(`Batch ${batchNum}/${totalBatch} — sending ${batch.length} record(s) (${range})`);
  
         try {
             const response = await withRetry(
-                () => axios.post(url, batchBody, { headers, timeout: REQ_TIMEOUT }),
+                () => axios.post(url, batch, { headers, timeout: REQ_TIMEOUT }),
                 `STOCK-BATCH-${batchNum}`
             );
- 
-            // Composite Graph returns 200 even on partial failures.
-            // Inspect each graph's isSuccessful flag.
-            const responseGraphs = response.data?.graphs ?? [];
-            let batchOk = true;
- 
-            for (const gResult of responseGraphs) {
-                if (!gResult.isSuccessful) {
-                    batchOk = false;
-                    log.error(`Graph [${gResult.graphId}] FAILED:`);
-                    log.error(`  ${JSON.stringify(gResult.graphResponse)}`);
-                    summary.failed.push({
-                        batch  : batchNum,
-                        graphId: gResult.graphId,
-                        error  : gResult.graphResponse
-                    });
-                } else {
-                    log.ok(`Graph [${gResult.graphId}] — OK`);
-                    summary.success.push({ batch: batchNum, graphId: gResult.graphId });
-                }
-            }
- 
-            // If SF returned no graph results, fall back to HTTP status check
-            if (responseGraphs.length === 0) {
-                verifySFResponse(response, `STOCK-BATCH-${batchNum}`);
-                summary.success.push({ batch: batchNum, graphId: 'UpsertStock', count: recordCount });
-                log.ok(`Batch ${batchNum}/${totalBatches} — HTTP ${response.status} — ${recordCount} records OK`);
-            }
+            verifySFResponse(response, `STOCK-BATCH-${batchNum}`);
+            summary.success.push({ batch: batchNum, count: batch.length, status: response.status, data: response.data });
+            log.ok(`Batch ${batchNum}/${totalBatch} — HTTP ${response.status} — ${batch.length} records OK`);
  
         } catch (err) {
             const status = err.response?.status ?? 'N/A';
             const body   = err.response?.data   ?? err.message;
-            summary.failed.push({ batch: batchNum, status, error: body });
-            log.error(`Batch ${batchNum}/${totalBatches} — HTTP ${status} — FAILED`);
+            const codes  = batch.map(r => r.ProductCode ?? 'UNKNOWN');
+            summary.failed.push({ batch: batchNum, count: batch.length, status, error: body, codes });
+            log.error(`Batch ${batchNum}/${totalBatch} — HTTP ${status} — FAILED`);
             log.error(`  Detail: ${JSON.stringify(body)}`);
         }
  
-        log.progress(i + graphBatch.length, allGraphs.length, 'graphs');
+        log.progress(batchIdx + 1, totalBatch, 'stock batches');
  
-        // Small pause between batches
-        if (i + MAX_GRAPHS_PER_REQUEST < allGraphs.length) {
-            await sleep(300);
+        if (STOCK_BATCH_DELAY > 0 && batchIdx < totalBatch - 1) {
+            await sleep(STOCK_BATCH_DELAY);
         }
     }
  
+    const successRecords = summary.success.reduce((n, b) => n + b.count, 0);
+    const failedRecords  = summary.failed.reduce ((n, b) => n + b.count, 0);
+ 
     log.divider('STOCK UPSERT SUMMARY');
-    log.info(`Total subrequests : ${totalRequests}`);
-    log.ok  (`Graphs success    : ${summary.success.length}`);
+    log.info(`Total Sent     : ${total}`);
+    log.ok  (`Success        : ${successRecords} records (${summary.success.length} batch(es))`);
     if (summary.failed.length > 0) {
-        log.error(`Graphs failed     : ${summary.failed.length}`);
+        log.error(`Failed         : ${failedRecords} records (${summary.failed.length} batch(es))`);
         summary.failed.forEach(f =>
-            log.warn(`  • Batch ${f.batch} | Graph: ${f.graphId ?? 'N/A'} — ${JSON.stringify(f.error)}`)
+            log.warn(`  • Batch ${f.batch} | HTTP ${f.status} — ${JSON.stringify(f.error)}`)
         );
     }
     log.divider();
  
-    if (summary.success.length === 0 && summary.failed.length > 0) {
-        throw new Error(`All ${summary.failed.length} stock graph(s) failed.`);
+    if (summary.success.length === 0) {
+        throw new Error(`All ${totalBatch} stock batch(es) failed.`);
     }
  
     return {
-        totalSubrequests: totalRequests,
-        totalGraphs,
-        successGraphs   : summary.success.length,
-        failedGraphs    : summary.failed.length,
-        failedDetails   : summary.failed
+        totalRecords  : total,
+        totalBatches  : totalBatch,
+        successBatches: summary.success.length,
+        failedBatches : summary.failed.length,
+        successRecords,
+        failedRecords,
+        failedDetails : summary.failed
     };
 }
 

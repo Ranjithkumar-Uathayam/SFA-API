@@ -128,9 +128,9 @@ exports.syncPriceLists = async (req, res) => {
         }
 
         log.info(`Fetched ${sqlData.length} raw DB row(s)`);
-
+        console.log("***********sqlData",sqlData)
         const payload = mapper.mapToPriceListPayload(sqlData);
-
+        console.log("************payload", JSON.stringify(payload))
         if (!payload.length) {
             log.warn('Mapper produced 0 records — nothing to sync.');
             return res.status(200).json({ message: 'No valid price data to sync.' });
@@ -140,8 +140,9 @@ exports.syncPriceLists = async (req, res) => {
         payload.slice(0, 3).forEach((p, i) =>
             log.info(`  [${i + 1}] ${p.ProductCode} → ${p.PriceList?.length ?? 0} pricelist(s)`)
         );
-
-        const sfResult = await sfService.upsertPriceLists(payload);
+        console.log("***********2*payload", JSON.stringify(payload))
+        const sfResult = {}
+        // const sfResult = await sfService.upsertPriceLists(payload);
 
         divider('PRICELIST SYNC COMPLETE');
         log.ok(`Elapsed : ${elapsed(startTime)}`);

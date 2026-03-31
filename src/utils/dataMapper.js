@@ -141,40 +141,22 @@ function mapToPriceListPayload(sqlRows) {
     const productMap = new Map();
 
     for (const row of sqlRows) {
-        const productCode = row.ProductCode;
+        const productCode = row.ProductCode
         const priceListId = row.PriceListID;
-
-        if (!productMap.has(productCode)) {
-            productMap.set(productCode, new Map());
-        }
-
-        const priceListMap = productMap.get(productCode);
-
-        if (!priceListMap.has(priceListId)) {
-            priceListMap.set(priceListId, {
+        const entryKey    = `${priceListId}_${row.PriceListCode ?? ''}`
+        if (!priceListMap.has(entryKey)) {
+            priceListMap.set(entryKey, {
                 PriceListID  : priceListId,
                 SubBrandCode : row.SubBrandCode  ?? null,
                 BPProductName: row.BPProductName ?? productCode,
-                PriceLisCode : row.PriceListCode ?? null,
+                PriceLisCode : row.PriceListCode ?? null,   // ← now unique per state
                 EffectiveFrom: row.EffectiveFrom ?? '2025-01-01T00:00:00',
                 EffectiveTo  : row.EffectiveTo   ?? '2055-12-31T00:00:00',
                 IsActive     : row.PriceListIsActive ?? 1,
                 Prices       : []
             });
         }
-
-        const entry = priceListMap.get(priceListId);
-
-        if (!entry.Prices.some(p => p.BPCategory === row.BPCategory)) {
-            entry.Prices.push({
-                PriceListID: priceListId,
-                PriceID    : row.PriceID    ?? null,
-                BPCategory : row.BPCategory ?? null,
-                Price      : row.Price      ?? 0,
-                MRP        : row.MRP        ?? 0,
-                IsActive   : row.PriceIsActive ?? 1
-            });
-        }
+        const entry = priceListMap.get(entryKey);  // ← use composite key here too
     }
 
     const result = [];

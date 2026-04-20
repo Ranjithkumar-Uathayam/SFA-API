@@ -591,6 +591,8 @@ async function upsertBusinessPartners(payload) {
 
 const STOCK_BATCH_SIZE  = parseInt(process.env.SF_BATCH_SIZE_STOCK,    10) || 200;
 const STOCK_BATCH_DELAY = parseInt(process.env.SF_STOCK_BATCH_DELAY_MS,10) || 300;
+const OUTSTANDING_BATCH_SIZE  = parseInt(process.env.SF_BATCH_SIZE_OUTSTANDING,    10) || 200;
+const OUTSTANDING_BATCH_DELAY = parseInt(process.env.SF_OUTSTANDING_BATCH_DELAY_MS,10) || 300;
  
 async function upsertStockInventory(payload) {
     // payload = flat array from mapToStockPayload
@@ -689,11 +691,122 @@ async function upsertStockInventory(payload) {
     };
 }
 
+function markOutstandingBatch(batch, isFinalBatch) {
+    return batch.map((row, index) => ({
+        ...row,
+        BatchEnd: isFinalBatch && index === batch.length - 1
+    }));
+}
+
+async function upsertOutstanding(payload) {
+    if (!Array.isArray(payload) || payload.length === 0) {
+        log.warn('upsertOutstanding: nothing to send.');
+        return { message: 'No outstanding records to upsert.' };
+    }
+
+    const token = await getSalesforceToken();
+
+    let url = process.env.SF_API_URL_Outstanding;
+   
+    if (!url && process.env.SF_API_URL_ProductMaster) {
+        url = process.env.SF_API_URL_ProductMaster //.replace('ProductUpsertAPI', 'OutStndingAPI');
+        log.info(`Derived Outstanding URL: ${url}`);
+    }
+    //url = buildSalesforceUrl(url, instanceUrl);
+
+    if (!url) throw new Error('SF_API_URL_Outstanding is not set in .env');
+
+    const headers = {
+        'Content-Type': 'application/json',
+        Authorization : `Bearer ${token}`
+    };
+
+    const total      = payload.length;
+    const totalBatch = Math.ceil(total / OUTSTANDING_BATCH_SIZE);
+    const summary    = { success: [], failed: [] };
+        console.log("*outurl",url)
+    log.divider('OUTSTANDING UPSERT START');
+    log.info(`Total records    : ${total}`);
+    log.info(`Batch size       : ${OUTSTANDING_BATCH_SIZE}`);
+    log.info(`Total batches    : ${totalBatch}`);
+    log.info(`Endpoint         : ${url}`);
+    log.divider();
+
+    for (let batchIdx = 0; batchIdx < totalBatch; batchIdx++) {
+        const rawBatch = payload.slice(
+            batchIdx * OUTSTANDING_BATCH_SIZE,
+            (batchIdx + 1) * OUTSTANDING_BATCH_SIZE
+        );
+        const batchNum = batchIdx + 1;
+        const batch = markOutstandingBatch(rawBatch, batchNum === totalBatch);
+        const range = `records ${batchIdx * OUTSTANDING_BATCH_SIZE + 1}-${Math.min((batchIdx + 1) * OUTSTANDING_BATCH_SIZE, total)}`;
+
+        log.info(`Batch ${batchNum}/${totalBatch} - sending ${batch.length} record(s) (${range})`);
+
+        try {
+            const response = await withRetry(
+                () => axios.post(url, batch, { headers, timeout: REQ_TIMEOUT }),
+                `OUTSTANDING-BATCH-${batchNum}`
+            );
+            verifySFResponse(response, `OUTSTANDING-BATCH-${batchNum}`);
+            summary.success.push({
+                batch: batchNum,
+                count: batch.length,
+                status: response.status,
+                data: response.data
+            });
+            log.ok(`Batch ${batchNum}/${totalBatch} - HTTP ${response.status} - ${batch.length} records OK`);
+        } catch (err) {
+            const status = err.response?.status ?? 'N/A';
+            const body   = err.response?.data   ?? err.message;
+            const codes  = batch.map(r => `${r.CardCode ?? 'UNKNOWN'}:${r.InvoiceNo ?? 'NA'}`);
+            summary.failed.push({ batch: batchNum, count: batch.length, status, error: body, codes });
+            log.error(`Batch ${batchNum}/${totalBatch} - HTTP ${status} - FAILED`);
+            log.error(`  Detail: ${JSON.stringify(body)}`);
+        }
+
+        log.progress(batchIdx + 1, totalBatch, 'outstanding batches');
+
+        if (OUTSTANDING_BATCH_DELAY > 0 && batchIdx < totalBatch - 1) {
+            await sleep(OUTSTANDING_BATCH_DELAY);
+        }
+    }
+
+    const successRecords = summary.success.reduce((n, b) => n + b.count, 0);
+    const failedRecords  = summary.failed.reduce((n, b) => n + b.count, 0);
+
+    log.divider('OUTSTANDING UPSERT SUMMARY');
+    log.info(`Total Sent     : ${total}`);
+    log.ok  (`Success        : ${successRecords} records (${summary.success.length} batch(es))`);
+    if (summary.failed.length > 0) {
+        log.error(`Failed         : ${failedRecords} records (${summary.failed.length} batch(es))`);
+        summary.failed.forEach(f =>
+            log.warn(`  - Batch ${f.batch} | HTTP ${f.status} - ${JSON.stringify(f.error)}`)
+        );
+    }
+    log.divider();
+
+    if (summary.success.length === 0) {
+        throw new Error(`All ${totalBatch} outstanding batch(es) failed.`);
+    }
+
+    return {
+        totalRecords  : total,
+        totalBatches  : totalBatch,
+        successBatches: summary.success.length,
+        failedBatches : summary.failed.length,
+        successRecords,
+        failedRecords,
+        failedDetails : summary.failed
+    };
+}
+
 module.exports = {
     upsertProducts,
     upsertPriceLists,
     uploadImages,
     upsertSchemes,
     upsertBusinessPartners,
-    upsertStockInventory
+    upsertStockInventory,
+    upsertOutstanding
 };

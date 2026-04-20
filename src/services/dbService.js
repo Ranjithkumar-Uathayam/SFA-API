@@ -617,11 +617,122 @@ async function getStockData() {
     }
 }
 
+async function getOutstandingData() {
+    try {
+        const pool = await getPool();
+
+        const query = `
+            SELECT
+                CASE
+                    WHEN tk.U_Brand LIKE '%UATHAYAM%' THEN 'UATHAYAM'
+                    ELSE 'ARISER'
+                END AS DivisionCode,
+                CAST(tk.DocEntry AS NVARCHAR(20)) AS DocEntry,
+                CASE
+                    WHEN tk.U_Brand LIKE '%UATHAYAM%' THEN 'UATHAYAM'
+                    ELSE 'ARISER'
+                END AS DivisionName,
+                tk.U_Brand AS Brand,
+                CASE
+                    WHEN k.TransType = '13' THEN 'AR Invoice'
+                    WHEN k.TransType = '30' THEN 'Journal'
+                    ELSE NULL
+                END AS DocType,
+                CASE
+                    WHEN k.Ref1 NOT LIKE '%[^0-9]%' AND k.Ref1 IS NOT NULL
+                    THEN CAST(k.Ref1 AS INT)
+                    ELSE NULL
+                END AS InvoiceNo,
+                tk.DocDate AS InvoiceDate,
+                k.duedat AS DueDate,
+                k.CardCode AS CardCode,
+                k.CardName AS CardName,
+                lk.City AS City,
+                lk.State AS STATE,
+                k.memo AS DocumentRemarks,
+                CASE
+                    WHEN k.BalDueDeb > 0 THEN DATEDIFF(d, k.duedat, GETDATE())
+                    ELSE 0
+                END AS OverdueDays,
+                GETDATE() AS OverdueDate,
+                CASE
+                    WHEN k.TransType = '30' THEN k.Debit
+                    ELSE ISNULL(tk.DocTotal, 0)
+                END AS DocumentValue,
+                k.BalDueDeb AS BalanceToBePaid,
+                CAST(0 AS BIT) AS BatchEnd
+            FROM (
+                SELECT
+                    T2.CardCode,
+                    T2.CardName,
+                    T0.RefDate,
+                    T1.BaseRef,
+                    T1.Debit,
+                    T1.Credit,
+                    T0.TransId,
+                    T1.BalDueDeb,
+                    T1.LineMemo,
+                    T2.MailCity,
+                    T3.GroupName,
+                    T1.Ref1,
+                    CASE
+                        WHEN T1.TransType IN ('-2', '30') THEN T1.DueDate
+                        ELSE T0.RefDate
+                    END AS duedat,
+                    T1.OcrCode3 AS brand,
+                    T0.memo,
+                    T0.TransType
+                FROM [BBLive].[dbo].OJDT T0
+                INNER JOIN [BBLive].[dbo].JDT1 T1 ON T0.TransId = T1.TransId
+                INNER JOIN [BBLive].[dbo].OCRD T2 ON T2.CardCode = T1.ShortName
+                INNER JOIN [BBLive].[dbo].OCRG T3 ON T2.GroupCode = T3.GroupCode
+                WHERE T1.BalDueDeb <> '0'
+                  AND T2.CardType = 'C'
+            ) k
+            LEFT JOIN (
+                SELECT
+                    tl.DocNum,
+                    tl.DocEntry,
+                    tl.DocDate,
+                    tl.DocTotal,
+                    tl.CardCode,
+                    tl.U_Brand,
+                    tg.U_Remarks,
+                    tl.TransId
+                FROM [BBLive].[dbo].OINV tl
+                LEFT JOIN [BBLive].[dbo].[@INCM_BND1] tg ON tg.U_Name = RTRIM(tl.U_Brand)
+            ) tk ON CONVERT(NVARCHAR(20), tk.DocNum) = k.Ref1
+                 AND tk.CardCode = k.CardCode
+                 AND tk.TransId = k.TransId
+            LEFT JOIN (
+                SELECT
+                    cr1.CardCode,
+                    cr1.CardName,
+                    cr1.U_AreaCode AS agent,
+                    cr2.City,
+                    cr2.State
+                FROM [BBLive].[dbo].OCRD cr1
+                LEFT JOIN [BBLive].[dbo].CRD1 cr2 ON cr2.CardCode = cr1.CardCode
+                                   AND cr2.AdresType = 'B'
+            ) lk ON lk.CardCode = k.CardCode
+            WHERE tk.DocEntry = 963804
+        `;
+
+        const { recordset } = await pool.request().query(query);
+        return recordset;
+
+    } catch (err) {
+        console.error('SQL Error (Outstanding):', err);
+        throw err;
+    }
+}
+
 module.exports = {
     getProductData,
     getPriceListData,
     getImageData,
     getSchemeData,
     getBPMasterData,
-    getStockData
+    getStockData,
+    getOutstandingData
 };

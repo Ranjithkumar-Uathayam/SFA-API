@@ -42,6 +42,7 @@ app.post('/api/sync/images',            syncController.syncImages);
 app.post('/api/sync/schemes',           syncController.syncSchemes);
 app.post('/api/sync/businesspartners',  syncController.syncBusinessPartners);  
 app.post('/api/sync/stockInventory',  syncController.syncStockInventory);
+app.post('/api/sync/outstanding',     syncController.syncOutstanding);
 
 // Health check
 app.get('/', (req, res) => {
@@ -53,7 +54,8 @@ app.get('/', (req, res) => {
         '  POST /api/sync/images\n' +
         '  POST /api/sync/schemes\n' +
         '  POST /api/sync/businesspartners\n' +
-        ' POST /api/sync/stockInventory'
+        '  POST /api/sync/stockInventory\n' +
+        '  POST /api/sync/outstanding'
     );
 });
 
@@ -66,4 +68,5 @@ app.listen(PORT, () => {
     console.log(` - POST /api/sync/schemes`);
     console.log(` - POST /api/sync/businesspartners`);
     console.log(` - POST /api/sync/stockInventory`);
+    console.log(` - POST /api/sync/outstanding`);
 });

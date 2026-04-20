@@ -440,6 +440,60 @@ function mapToStockPayload(rows) {
     }));
 }
 
+function formatDateOnly(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function formatDateTime(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    const millis = String(date.getMilliseconds()).padStart(3, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${millis}`;
+}
+
+function toNumber(value) {
+    if (value == null || value === '') return null;
+    const num = Number(value);
+    return Number.isNaN(num) ? null : num;
+}
+
+function mapToOutstandingPayload(rows) {
+    if (!rows || rows.length === 0) return [];
+
+    return rows.map(row => ({
+        DivisionCode    : row.DivisionCode ?? null,
+        DivisionName    : row.DivisionName ?? null,
+        Brand           : row.Brand ?? null,
+        DocType         : row.DocType ?? null,
+        InvoiceNo       : row.InvoiceNo == null ? null : Number(row.InvoiceNo),
+        InvoiceDate     : formatDateOnly(row.InvoiceDate),
+        DueDate         : formatDateTime(row.DueDate),
+        CardCode        : row.CardCode ?? null,
+        CardName        : row.CardName ?? null,
+        City            : row.City ?? null,
+        STATE           : row.STATE ?? null,
+        DocumentRemarks : row.DocumentRemarks ?? null,
+        OverdueDays     : row.OverdueDays == null ? 0 : Number(row.OverdueDays),
+        OverdueDate     : formatDateTime(row.OverdueDate),
+        DocumentValue   : toNumber(row.DocumentValue),
+        BalanceToBePaid : toNumber(row.BalanceToBePaid),
+        BatchEnd        : Boolean(row.BatchEnd)
+    }));
+}
+
 module.exports = {
     mapToSalesforcePayload,
     mapToPriceListPayload,
@@ -448,5 +502,6 @@ module.exports = {
     mapToBPPayload,
     groupByProduct,
     buildPayload,
-    mapToStockPayload
+    mapToStockPayload,
+    mapToOutstandingPayload
 };

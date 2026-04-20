@@ -106,7 +106,6 @@ async function getPriceListData() {
                     'EVERYDAY DHOTIE','ALLDAYS DHOTIE','ADD DHOTIE','ADD SHIRT',
                     'EVERYDAY SHIRTING','EVERYDAY RDY'
                 )
-            AND t0.ItemCode Like '%APHAF368301%'
         `;
 
         const { recordset } = await pool.request().query(query);

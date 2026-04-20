@@ -141,24 +141,47 @@ function mapToPriceListPayload(sqlRows) {
     const productMap = new Map();
 
     for (const row of sqlRows) {
-        const productCode = row.ProductCode
+        const productCode = row.ProductCode;
         const priceListId = row.PriceListID;
-        const entryKey    = `${priceListId}_${row.PriceListCode ?? ''}`
+        const entryKey    = `${priceListId}_${row.PriceListCode ?? ''}`;
+
+        // ── 1. Ensure the product-level map exists ──────────────────────────
+        if (!productMap.has(productCode)) {
+            productMap.set(productCode, new Map());
+        }
+
+        // ── 2. NOW get the inner map (this was missing before) ──────────────
+        const priceListMap = productMap.get(productCode);
+
+        // ── 3. Ensure this state entry exists ───────────────────────────────
         if (!priceListMap.has(entryKey)) {
             priceListMap.set(entryKey, {
                 PriceListID  : priceListId,
-                SubBrandCode : row.SubBrandCode  ?? null,
-                BPProductName: row.BPProductName ?? productCode,
-                PriceLisCode : row.PriceListCode ?? null,   // ← now unique per state
-                EffectiveFrom: row.EffectiveFrom ?? '2025-01-01T00:00:00',
-                EffectiveTo  : row.EffectiveTo   ?? '2055-12-31T00:00:00',
+                SubBrandCode : row.SubBrandCode      ?? null,
+                BPProductName: row.BPProductName     ?? productCode,
+                PriceLisCode : row.PriceListCode     ?? null,
+                EffectiveFrom: row.EffectiveFrom     ?? '2025-01-01T00:00:00',
+                EffectiveTo  : row.EffectiveTo       ?? '2055-12-31T00:00:00',
                 IsActive     : row.PriceListIsActive ?? 1,
                 Prices       : []
             });
         }
-        const entry = priceListMap.get(entryKey);  // ← use composite key here too
+
+        // ── 4. Append the price row ─────────────────────────────────────────
+        const entry = priceListMap.get(entryKey);
+        if (!entry.Prices.some(p => p.PriceID === row.PriceID)) {
+            entry.Prices.push({
+                PriceListID: priceListId,
+                PriceID    : row.PriceID      ?? null,
+                BPCategory : row.BPCategory   ?? null,
+                Price      : row.Price        ?? 0,
+                MRP        : row.MRP          ?? 0,
+                IsActive   : row.PriceIsActive ?? 1
+            });
+        }
     }
 
+    // ── 5. Flatten to final array ───────────────────────────────────────────
     const result = [];
     for (const [productCode, priceListMap] of productMap) {
         result.push({

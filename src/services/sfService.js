@@ -55,7 +55,6 @@ async function getSalesforceToken() {
             },
             timeout: REQ_TIMEOUT
         });
-        console.log("****************",res.data.access_token)
         cachedToken = res.data.access_token;
         instanceUrl = res.data.instance_url;
         tokenExpiry = new Date(Date.now() + 55 * 60 * 1000);
@@ -712,7 +711,7 @@ async function upsertOutstanding(payload) {
         url = process.env.SF_API_URL_ProductMaster //.replace('ProductUpsertAPI', 'OutStndingAPI');
         log.info(`Derived Outstanding URL: ${url}`);
     }
-    //url = buildSalesforceUrl(url, instanceUrl);
+    url = buildSalesforceUrl(url, instanceUrl);
 
     if (!url) throw new Error('SF_API_URL_Outstanding is not set in .env');
 
@@ -724,7 +723,7 @@ async function upsertOutstanding(payload) {
     const total      = payload.length;
     const totalBatch = Math.ceil(total / OUTSTANDING_BATCH_SIZE);
     const summary    = { success: [], failed: [] };
-        console.log("*outurl",url)
+
     log.divider('OUTSTANDING UPSERT START');
     log.info(`Total records    : ${total}`);
     log.info(`Batch size       : ${OUTSTANDING_BATCH_SIZE}`);

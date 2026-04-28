@@ -44,7 +44,7 @@ const log = {
 let cachedToken, tokenExpiry, instanceUrl;
 
 async function getSalesforceToken() {
-    if (cachedToken && tokenExpiry > new Date()) return cachedToken;
+    // if (cachedToken && tokenExpiry > new Date()) return cachedToken;
 
     try {
         const res = await axios.get(process.env.SF_AUTH_URL, {
@@ -55,7 +55,7 @@ async function getSalesforceToken() {
             },
             timeout: REQ_TIMEOUT
         });
-
+        console.log("****************",res.data.access_token)
         cachedToken = res.data.access_token;
         instanceUrl = res.data.instance_url;
         tokenExpiry = new Date(Date.now() + 55 * 60 * 1000);

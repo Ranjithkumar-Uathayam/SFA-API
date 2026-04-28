@@ -5,6 +5,9 @@
     "main": "index.js",
     "bin": "index.js",
     "pkg": {
+        "targets": [
+            "node18-win-x64"
+        ],
         "assets": [
             "api/**/*",
             "node_modules/**/*",

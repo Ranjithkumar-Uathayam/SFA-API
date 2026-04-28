@@ -599,8 +599,8 @@ async function getStockData() {
                     ELSE CAST(0 AS BIT) END                                AS IsActive,
                 CASE WHEN t0.MinLevel > t1.OnHand THEN 'High Stock'
                     ELSE 'Low Stock' END                                   AS StockHighlightMessageDetails,
-                CASE WHEN t0.MinLevel > t1.OnHand THEN 'Stock Available'
-                    ELSE 'Very few stock left' END                         AS StockMessage
+                CASE WHEN CAST(t0.MinLevel AS INT)  > CAST(t1.OnHand AS INT) THEN 'Very few stock left'
+                    ELSE 'Stock Available' END                         AS StockMessage
             FROM [BBLive].[dbo].OITM AS t0
             INNER JOIN [BBLive].[dbo].OITW AS t1 ON t0.ItemCode = t1.ItemCode
             WHERE t1.WhsCode = 'ASRS' 
@@ -715,7 +715,6 @@ async function getOutstandingData() {
                 LEFT JOIN [BBLive].[dbo].CRD1 cr2 ON cr2.CardCode = cr1.CardCode
                                    AND cr2.AdresType = 'B'
             ) lk ON lk.CardCode = k.CardCode
-            WHERE tk.DocEntry = 963804
         `;
 
         const { recordset } = await pool.request().query(query);

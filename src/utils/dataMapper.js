@@ -145,15 +145,12 @@ function mapToPriceListPayload(sqlRows) {
         const priceListId = row.PriceListID;
         const entryKey    = `${priceListId}_${row.PriceListCode ?? ''}`;
 
-        // ── 1. Ensure the product-level map exists ──────────────────────────
         if (!productMap.has(productCode)) {
             productMap.set(productCode, new Map());
         }
 
-        // ── 2. NOW get the inner map (this was missing before) ──────────────
         const priceListMap = productMap.get(productCode);
 
-        // ── 3. Ensure this state entry exists ───────────────────────────────
         if (!priceListMap.has(entryKey)) {
             priceListMap.set(entryKey, {
                 PriceListID  : priceListId,
@@ -167,7 +164,6 @@ function mapToPriceListPayload(sqlRows) {
             });
         }
 
-        // ── 4. Append the price row ─────────────────────────────────────────
         const entry = priceListMap.get(entryKey);
         if (!entry.Prices.some(p => p.PriceID === row.PriceID)) {
             entry.Prices.push({
@@ -181,7 +177,6 @@ function mapToPriceListPayload(sqlRows) {
         }
     }
 
-    // ── 5. Flatten to final array ───────────────────────────────────────────
     const result = [];
     for (const [productCode, priceListMap] of productMap) {
         result.push({
@@ -347,7 +342,7 @@ function mapToBPPayload(rows) {
                 Latitude        : decimal(row.Latitude)         ?? 0.00,
                 Longitude       : decimal(row.Longitude)        ?? 0.00,
                 AreaCode        : row.AreaCode         ?? '',
-
+                TwoYear__c      : false,
                 BillShipTo          : [],
                 Map_BpContactDetails    : [],
                 Discount_BP_Division: JSON.parse(row.Discount_BP_Division),
@@ -415,13 +410,7 @@ function buildPayload(product) {
     };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// STOCK INVENTORY MAPPER
-//
-// Converts flat SQL rows into the Apex REST bulkAccountStockUpsert format.
-// Endpoint : POST /services/apexrest/bulkAccountStockUpsert
-// Payload  : flat JSON array — one object per stock row.
-// ─────────────────────────────────────────────────────────────────────────────
+
 function mapToStockPayload(rows) {
     if (!rows || rows.length === 0) return [];
 

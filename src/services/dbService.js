@@ -568,6 +568,7 @@ async function getBPMasterData() {
             AND T0.validFor = 'Y'
             AND T0.U_AreaCode != ''
             AND ISNULL(CAST(T0.U_GSTIN AS NVARCHAR(MAX)), '') NOT IN ('UNREGISTERED','')
+            AND T0.CardCode = 'C037327'
 
             ORDER BY T0.CardCode, SB.DivisionCode, SB.SubBrandName`
 

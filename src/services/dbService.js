@@ -47,15 +47,25 @@ async function getProductData(lastSyncDate, offset = 0, limit = 500) {
             t0.U_SubGrp1 AS SubBrandCode
         FROM [BBLive].[dbo].oitm t0
         JOIN [BBLive].[dbo].oitb t1 ON t0.ItmsGrpCod = t1.ItmsGrpCod
-        WHERE t0.validFor='Y'
-            AND t0.UpdateDate >= @lastSyncDate
-            AND t0.U_SubGrp1 NOT IN (
-                'ACCESSORIES','ADVERTISEMENT','ALL','SAMPLE','PRINTING & STATIONERY',
-                'IMPERIAL COMPUTERS','PACKING MATERIAL','REPAIRS & MAINTENANCE',
-                'SALES PROMOTION EXPENSES','EVERYDAY DHOTIE','ALLDAYS DHOTIE',
-                'ADD DHOTIE','ADD SHIRT','EVERYDAY SHIRTING','EVERYDAY RDY'
-            )
-            AND t0.U_SubGrp1 = 'UATHAYAM SUITING'
+        
+        -- ✅ Filter: only items that exist in @INS_OPLM with SelPrice > 0
+        WHERE EXISTS (
+            SELECT 1
+            FROM [BBLive].[dbo]."@INS_OPLM" plm
+            INNER JOIN [BBLive].[dbo]."@INS_PLM2" plm2 ON plm2.DocEntry = plm.DocEntry
+            WHERE plm.U_ItemCode = t0.ItemCode
+            AND plm2.U_SelPrice > 0
+        )
+        
+        AND t0.validFor = 'Y'
+        -- AND t0.UpdateDate >= @lastSyncDate
+        AND t0.U_SubGrp1 NOT IN (
+            'ACCESSORIES','ADVERTISEMENT','ALL','SAMPLE','PRINTING & STATIONERY',
+            'IMPERIAL COMPUTERS','PACKING MATERIAL','REPAIRS & MAINTENANCE',
+            'SALES PROMOTION EXPENSES','EVERYDAY DHOTIE','ALLDAYS DHOTIE',
+            'ADD DHOTIE','ADD SHIRT','EVERYDAY SHIRTING','EVERYDAY RDY'
+        )
+        
         ORDER BY t0.ItemCode
         OFFSET @offset ROWS
         FETCH NEXT @limit ROWS ONLY

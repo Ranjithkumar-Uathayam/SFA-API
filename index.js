@@ -28,6 +28,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const syncController = require('./src/controllers/syncController');
+const { startCronJobs } = require('./src/scheduler/cronJobs');
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -69,4 +70,6 @@ app.listen(PORT, () => {
     console.log(` - POST /api/sync/businesspartners`);
     console.log(` - POST /api/sync/stockInventory`);
     console.log(` - POST /api/sync/outstanding`);
+
+    startCronJobs();
 });

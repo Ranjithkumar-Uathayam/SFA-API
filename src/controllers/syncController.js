@@ -312,7 +312,6 @@ exports.syncBusinessPartners = async (req, res) => {
             log.warn('No BP data found in DB.');
             return res.status(200).json({ message: 'No BP data found.' });
         }
-        console.log("*************sqlData", sqlData )
         const payload  = mapper.mapToBPPayload(sqlData);
         const totalBPs = payload.businessPartners.length;
         log.info(`Mapped to ${totalBPs} unique business partner(s)`);
@@ -331,7 +330,6 @@ exports.syncBusinessPartners = async (req, res) => {
                 `SubBrands: ${bp.MST_Map_BP_SubBrand.length}`
             )
         );
-
         const sfResult = await sfService.upsertBusinessPartners(payload);
 
         divider('BP SYNC COMPLETE');
@@ -448,7 +446,7 @@ exports.syncOutstanding = async (req, res) => {
 
         const payload = mapper.mapToOutstandingPayload(sqlData);
         log.info(`Mapped to ${payload.length} outstanding record(s)`);
-        console.log("payload****", payload)
+
         if (payload.length === 0) {
             log.warn('Mapper produced 0 records - nothing to sync.');
             return res.status(200).json({ message: 'No valid outstanding data to sync.' });

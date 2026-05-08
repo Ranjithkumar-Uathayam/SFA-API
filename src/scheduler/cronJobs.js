@@ -106,21 +106,21 @@ async function runOutstandingSync() {
 }
 
 function startCronJobs() {
-    // Stock inventory sync — every 5 hours (at minute 0)
-    cron.schedule('0 */5 * * *', () => {
-        log.info('Cron triggered: Stock Inventory Sync (every 5 hours)');
-        runStockInventorySync();
-    });
+    // // Stock inventory sync — every 5 hours (at minute 0)
+    // cron.schedule('0 */5 * * *', () => {
+    //     log.info('Cron triggered: Stock Inventory Sync (every 5 hours)');
+    //     runStockInventorySync();
+    // });
 
-    // Outstanding sync — every 45 minutes
-    cron.schedule('*/45 * * * *', () => {
-        log.info('Cron triggered: Outstanding Sync (every 45 minutes)');
-        runOutstandingSync();
-    });
+    // // Outstanding sync — every 45 minutes
+    // cron.schedule('*/45 * * * *', () => {
+    //     log.info('Cron triggered: Outstanding Sync (every 45 minutes)');
+    //     runOutstandingSync();
+    // });
 
-    log.ok('Cron jobs scheduled:');
-    log.ok('  Stock Inventory Sync  → every 5 hours  (0 */5 * * *)');
-    log.ok('  Outstanding Sync      → every 45 min   (*/45 * * * *)');
+    // log.ok('Cron jobs scheduled:');
+    // log.ok('  Stock Inventory Sync  → every 5 hours  (0 */5 * * *)');
+    // log.ok('  Outstanding Sync      → every 45 min   (*/45 * * * *)');
 }
 
 module.exports = { startCronJobs };

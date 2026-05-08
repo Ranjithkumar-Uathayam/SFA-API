@@ -335,20 +335,7 @@ async function getSchemeData() {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // BP MASTER
-//
-// [@INS_BPDIV] does not exist in this database — removed that JOIN.
-// MST_MAP_BP_Division is built from T0 columns only (Grade, PriceLisCode)
-// with the remaining fields defaulted to 0 / ''.
-//
-// All other fixes retained:
-//   • BillShipID  = T1.LineNum  (integer)
-//   • PhoneNumber = T1.Tel1
-//   • BPGroupCode = '' (hardcoded)
-//   • MST_MAP_BP_Brand.Brand = SB.SubBrandName
-//   • BillShipTo T0 refs use scalar subqueries (CROSS JOIN binding fix)
-// ─────────────────────────────────────────────────────────────────────────────
 async function getBPMasterData() {
     try {
         const pool = await getPool();
@@ -417,7 +404,7 @@ async function getBPMasterData() {
                 ------------------------------------------------------------------
                 (
                     SELECT
-                        (C.CntctCode + T1.LineNum) AS BillShipID,
+                        (ISNULL(T0.DocEntry,1) + T1.LineNum) AS BillShipID,
                         T1.AdresType AS Type,
                         T0.CardName AS DisplayName,
                         CASE WHEN T1.AdresType = 'B' THEN 'OFFICE' ELSE 'SHIP' END AS LocationName,
@@ -430,8 +417,37 @@ async function getBPMasterData() {
                         ISNULL(T1.State,'') AS State,
                         ISNULL(T1.Country,'') AS Country,
                         ISNULL(T1.ZipCode,'') AS ZipCode,
-                        RIGHT(ISNULL(T0.Phone1, T0.Phone2), 10) AS PhoneNumber,
-                        RIGHT(ISNULL(T0.Phone2, T0.Cellular), 10) AS MobileNumber,
+                        CASE 
+                            WHEN LEN(RIGHT(ISNULL(T0.Phone1,''),10)) = 10 
+                                AND RIGHT(ISNULL(T0.Phone1,''),10) NOT LIKE '%[^0-9]%'
+                            THEN RIGHT(T0.Phone1,10)
+
+                            WHEN LEN(RIGHT(ISNULL(T0.Phone2,''),10)) = 10 
+                                AND RIGHT(ISNULL(T0.Phone2,''),10) NOT LIKE '%[^0-9]%'
+                            THEN RIGHT(T0.Phone2,10)
+
+                            WHEN LEN(RIGHT(ISNULL(T0.Cellular,''),10)) = 10 
+                                AND RIGHT(ISNULL(T0.Cellular,''),10) NOT LIKE '%[^0-9]%'
+                            THEN RIGHT(T0.Cellular,10)
+
+                            ELSE ''
+                        END AS PhoneNumber,
+
+                        CASE 
+                            WHEN LEN(RIGHT(ISNULL(T0.Phone1,''),10)) = 10 
+                                AND RIGHT(ISNULL(T0.Phone1,''),10) NOT LIKE '%[^0-9]%'
+                            THEN RIGHT(T0.Phone1,10)
+
+                            WHEN LEN(RIGHT(ISNULL(T0.Phone2,''),10)) = 10 
+                                AND RIGHT(ISNULL(T0.Phone2,''),10) NOT LIKE '%[^0-9]%'
+                            THEN RIGHT(T0.Phone2,10)
+
+                            WHEN LEN(RIGHT(ISNULL(T0.Cellular,''),10)) = 10 
+                                AND RIGHT(ISNULL(T0.Cellular,''),10) NOT LIKE '%[^0-9]%'
+                            THEN RIGHT(T0.Cellular,10)
+
+                            ELSE ''
+                        END AS MobileNumber,
                         ISNULL(T0.E_Mail,'') AS Email,
                         ISNULL(T0.U_GSTIN,'') AS GSTNo,
                         CASE WHEN T0.validFor = 'Y' THEN 1 ELSE 0 END AS IsActive,
@@ -476,8 +492,18 @@ async function getBPMasterData() {
                         CntctCode                                  AS ContactPersonID,
                         Name                                       AS ContactPersonName,
                         ISNULL(Position, 'proprietor')             AS Designation,
-                        RIGHT(ISNULL(Cellolar, T0.Cellular), 10)              AS MobileNum,
-                        RIGHT(ISNULL(Cellolar, T0.Cellular), 10)              AS WhatsAppNum,
+                        CASE 
+                            WHEN LEN(RIGHT(ISNULL(T0.Cellular,''),10)) = 10 
+                                AND RIGHT(ISNULL(T0.Cellular,''),10) NOT LIKE '%[^0-9]%'
+                            THEN RIGHT(T0.Cellular,10)
+                            ELSE ''
+                        END AS MobileNum,
+                         CASE 
+                            WHEN LEN(RIGHT(ISNULL(T0.Cellular,''),10)) = 10 
+                                AND RIGHT(ISNULL(T0.Cellular,''),10) NOT LIKE '%[^0-9]%'
+                            THEN RIGHT(T0.Cellular,10)
+                            ELSE ''
+                        END AS WhatsAppNum,
                         E_MailL                                    AS EmailID,
                         CASE WHEN Active = 'Y' THEN 1 ELSE 0 END  AS IsActive,
                         CAST(0 AS INT)                             AS IsSendOverDueReminder,
@@ -578,7 +604,6 @@ async function getBPMasterData() {
             AND T0.validFor = 'Y'
             AND T0.U_AreaCode != ''
             AND ISNULL(CAST(T0.U_GSTIN AS NVARCHAR(MAX)), '') NOT IN ('UNREGISTERED','')
-            AND T0.CardCode = 'C037327'
 
             ORDER BY T0.CardCode, SB.DivisionCode, SB.SubBrandName`
 

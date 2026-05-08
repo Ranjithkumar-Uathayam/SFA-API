@@ -342,7 +342,7 @@ function mapToBPPayload(rows) {
                 Latitude        : decimal(row.Latitude)         ?? 0.00,
                 Longitude       : decimal(row.Longitude)        ?? 0.00,
                 AreaCode        : row.AreaCode         ?? '',
-                TwoYear__c      : false,
+                TwoYear         : false,
                 BillShipTo          : [],
                 Map_BpContactDetails    : [],
                 Discount_BP_Division: JSON.parse(row.Discount_BP_Division),

@@ -252,7 +252,7 @@ async function upsertPriceLists(priceLists) {
     }
 
     const token = await getSalesforceToken();
-
+    console.log(process.env.SF_API_URL_PriceList)
     let url = process.env.SF_API_URL_PriceList ||
         process.env.SF_API_URL_ProductMaster?.replace('ProductUpsertAPI', 'PriceListUpsertAPI');
     url = buildSalesforceUrl(url, instanceUrl);
@@ -444,7 +444,7 @@ async function upsertSchemes(schemes) {
         const policyId  = scheme?.Policy?.PolicyID     ?? 'UNKNOWN';
 
         try {
-            console.log("****************", JSON.stringify(scheme))
+           
             const response = await withRetry(
                 () => axios.post(url, scheme, { headers, timeout: REQ_TIMEOUT }),
                 policyNum
@@ -537,7 +537,6 @@ async function upsertBusinessPartners(payload) {
         const body = { businessPartners: [bp] };
 
         try {
-            console.log("*************body", JSON.stringify(body) )
             const response = await withRetry(
                 () => axios.post(url, body, { headers, timeout: REQ_TIMEOUT }),
                 code

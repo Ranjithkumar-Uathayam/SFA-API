@@ -174,8 +174,8 @@ async function getSchemeData() {
                 WHEN T1.U_bran='ARISER HOS' THEN 'ARISER'
                 END	
         AS DivisionCode,
-            GETDATE() AS FromDate,
-            T0.U_ToDt AS ToDate,
+            '2026-05-20T00:00:00' AS FromDate,
+            '2026-07-01T00:00:00' AS ToDate,
             0 AS AllowDiscountForAllProducts,
             NULL AS DiscountPer,
     
@@ -323,7 +323,7 @@ async function getSchemeData() {
         FROM [BBLive].[dbo]."@SCHEM" T0
         INNER JOIN [BBLive].[dbo]."@SCHEML" T1 ON T0.DocEntry = T1.DocEntry
         WHERE T0.U_FrmDt >= '20250701'
-        AND T0.U_ToDt  <= '20260430'
+        AND T0.U_ToDt  <= '20260531'
         `;
 
         const { recordset } = await pool.request().query(query);
@@ -492,16 +492,34 @@ async function getBPMasterData() {
                         CntctCode                                  AS ContactPersonID,
                         Name                                       AS ContactPersonName,
                         ISNULL(Position, 'proprietor')             AS Designation,
-                        CASE 
+                         CASE 
+                            WHEN LEN(RIGHT(ISNULL(T0.Phone1,''),10)) = 10 
+                                AND RIGHT(ISNULL(T0.Phone1,''),10) NOT LIKE '%[^0-9]%'
+                            THEN RIGHT(T0.Phone1,10)
+
+                            WHEN LEN(RIGHT(ISNULL(T0.Phone2,''),10)) = 10 
+                                AND RIGHT(ISNULL(T0.Phone2,''),10) NOT LIKE '%[^0-9]%'
+                            THEN RIGHT(T0.Phone2,10)
+
                             WHEN LEN(RIGHT(ISNULL(T0.Cellular,''),10)) = 10 
                                 AND RIGHT(ISNULL(T0.Cellular,''),10) NOT LIKE '%[^0-9]%'
                             THEN RIGHT(T0.Cellular,10)
+
                             ELSE ''
                         END AS MobileNum,
                          CASE 
+                            WHEN LEN(RIGHT(ISNULL(T0.Phone1,''),10)) = 10 
+                                AND RIGHT(ISNULL(T0.Phone1,''),10) NOT LIKE '%[^0-9]%'
+                            THEN RIGHT(T0.Phone1,10)
+
+                            WHEN LEN(RIGHT(ISNULL(T0.Phone2,''),10)) = 10 
+                                AND RIGHT(ISNULL(T0.Phone2,''),10) NOT LIKE '%[^0-9]%'
+                            THEN RIGHT(T0.Phone2,10)
+
                             WHEN LEN(RIGHT(ISNULL(T0.Cellular,''),10)) = 10 
                                 AND RIGHT(ISNULL(T0.Cellular,''),10) NOT LIKE '%[^0-9]%'
                             THEN RIGHT(T0.Cellular,10)
+
                             ELSE ''
                         END AS WhatsAppNum,
                         E_MailL                                    AS EmailID,
@@ -603,8 +621,7 @@ async function getBPMasterData() {
             WHERE T0.CardType = 'C'
             AND T0.validFor = 'Y'
             AND T0.U_AreaCode != ''
-            AND ISNULL(CAST(T0.U_GSTIN AS NVARCHAR(MAX)), '') NOT IN ('UNREGISTERED','')
-
+            AND T0.CardCode in ('C035580')
             ORDER BY T0.CardCode, SB.DivisionCode, SB.SubBrandName`
 
         const result = await pool.request().query(query);

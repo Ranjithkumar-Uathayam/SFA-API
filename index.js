@@ -27,7 +27,14 @@ if (!AbortSignal.any) {
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+
+// When running as a pkg executable, load .env from the exe's directory
+const isPkg = typeof process.pkg !== 'undefined';
+require('dotenv').config({
+    path: isPkg
+        ? path.join(path.dirname(process.execPath), '.env')
+        : path.join(__dirname, '.env')
+});
 const syncController = require('./src/controllers/syncController');
 const pushController    = require('./src/controllers/pushController');
 const productController = require('./src/controllers/productController');

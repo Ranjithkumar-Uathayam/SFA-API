@@ -24,10 +24,14 @@ if (!AbortSignal.any) {
         return controller.signal;
     };
 }
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const syncController = require('./src/controllers/syncController');
+const pushController    = require('./src/controllers/pushController');
+const productController = require('./src/controllers/productController');
+const masterController  = require('./src/controllers/masterController');
 const { startCronJobs } = require('./src/scheduler/cronJobs');
 
 const app = express();
@@ -36,28 +40,36 @@ const PORT = process.env.PORT || 3100;
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// Serve frontend dashboard
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ── Existing sync routes ───────────────────────────────────────────────────
 app.post('/api/sync/products',          syncController.syncProducts);
 app.post('/api/sync/pricelists',        syncController.syncPriceLists);
 app.post('/api/sync/images',            syncController.syncImages);
 app.post('/api/sync/schemes',           syncController.syncSchemes);
-app.post('/api/sync/businesspartners',  syncController.syncBusinessPartners);  
-app.post('/api/sync/stockInventory',  syncController.syncStockInventory);
-app.post('/api/sync/outstanding',     syncController.syncOutstanding);
+app.post('/api/sync/businesspartners',  syncController.syncBusinessPartners);
+app.post('/api/sync/stockInventory',    syncController.syncStockInventory);
+app.post('/api/sync/outstanding',       syncController.syncOutstanding);
 
-// Health check
-app.get('/', (req, res) => {
-    res.send(
-        'SFA API is running.\n\n' +
-        'Endpoints:\n' +
-        '  POST /api/sync/products\n' +
-        '  POST /api/sync/pricelists\n' +
-        '  POST /api/sync/images\n' +
-        '  POST /api/sync/schemes\n' +
-        '  POST /api/sync/businesspartners\n' +
-        '  POST /api/sync/stockInventory\n' +
-        '  POST /api/sync/outstanding'
-    );
+// ── Dashboard & push routes ────────────────────────────────────────────────
+app.get ('/api/dashboard/status', pushController.getDashboardStatus);
+app.post('/api/push/single',      pushController.pushSingle);
+app.post('/api/push/bulk',        pushController.pushBulk);
+
+// ── Product Master routes ──────────────────────────────────────────────────
+app.get ('/api/products',          productController.getProducts);
+app.post('/api/products/push',     productController.pushProducts);
+app.post('/api/products/push-all', productController.pushAllProducts);
+
+// ── Generic master routes ──────────────────────────────────────────────────
+app.get ('/api/master/:masterType/list',     masterController.getMasterList);
+app.post('/api/master/:masterType/push',     masterController.pushMasterRecords);
+app.post('/api/master/:masterType/push-all', masterController.pushAllMasterRecords);
+
+// Health check (JSON for API consumers)
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', service: 'SFA API', port: PORT });
 });
 
 app.listen(PORT, () => {

@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SFA Push</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #1a56db; --primary-dark: #0e3a8c;
+      --border: #e5e7eb; --bg: #f0f2f5; --card: #fff;
+      --text: #111827; --sub: #6b7280; --radius: 10px;
+      --pending: #6b7280; --pushing: #d97706; --pushed: #16a34a; --failed: #dc2626;
+    }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── Nav ── */
+    .topnav { background: linear-gradient(135deg,#1a56db 0%,#0e3a8c 100%); color:#fff; padding:0 24px; display:flex; align-items:center; gap:0; height:52px; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+    .topnav .brand { font-weight:700; font-size:.95rem; margin-right:24px; }
+    .topnav a { color:rgba(255,255,255,.75); text-decoration:none; font-size:.82rem; padding:0 14px; height:52px; display:flex; align-items:center; border-bottom:3px solid transparent; transition:color .15s,border-color .15s; }
+    .topnav a:hover { color:#fff; }
+    .topnav a.active { color:#fff; border-bottom-color:#fff; }
+
+    /* ── Loading bar ── */
+    #loadBar { position:fixed; top:0; left:0; width:0; height:3px; background:var(--primary); z-index:9999; transition:width .3s ease; }
+
+    /* ── Hero ── */
+    .hero { background: linear-gradient(135deg,#1a56db 0%,#0e3a8c 100%); color:#fff; padding:28px 24px 24px; }
+    .hero h1 { font-size:1.5rem; font-weight:800; }
+    .hero p  { font-size:.85rem; opacity:.8; margin-top:4px; }
+
+    /* ── Summary pills ── */
+    .summary-bar { display:flex; gap:10px; padding:16px 24px; background:#fff; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+    .pill { display:flex; align-items:center; gap:6px; padding:6px 14px; border-radius:999px; border:2px solid transparent; cursor:pointer; font-size:.8rem; font-weight:600; transition:all .15s; user-select:none; }
+    .pill:hover { opacity:.8; }
+    .pill.active { box-shadow:0 0 0 2px currentColor; }
+    .pill-all     { background:#eff6ff; color:var(--primary); }
+    .pill-Pending { background:#f3f4f6; color:var(--pending); }
+    .pill-Pushing { background:#fffbeb; color:var(--pushing); }
+    .pill-Pushed  { background:#f0fdf4; color:var(--pushed); }
+    .pill-Failed  { background:#fef2f2; color:var(--failed); }
+    .pill .dot { width:8px; height:8px; border-radius:50%; background:currentColor; }
+    .pill-Pushing .dot { animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ── Toolbar ── */
+    .toolbar { display:flex; align-items:center; gap:10px; padding:12px 24px; background:#fff; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+    .toolbar input[type=text] { flex:1; min-width:200px; padding:7px 12px; border:1px solid var(--border); border-radius:6px; font-size:.85rem; outline:none; }
+    .toolbar input[type=text]:focus { border-color:var(--primary); }
+    .toolbar select { padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-size:.85rem; background:#fff; outline:none; cursor:pointer; }
+    .btn { padding:7px 14px; border-radius:6px; border:none; font-size:.82rem; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; transition:opacity .15s; }
+    .btn:disabled { opacity:.45; cursor:not-allowed; }
+    .btn-primary  { background:var(--primary); color:#fff; }
+    .btn-primary:not(:disabled):hover  { background:var(--primary-dark); }
+    .btn-outline  { background:#fff; color:var(--primary); border:1.5px solid var(--primary); }
+    .btn-outline:not(:disabled):hover  { background:#eff6ff; }
+    .btn-danger   { background:#dc2626; color:#fff; }
+    .btn-danger:not(:disabled):hover   { background:#b91c1c; }
+
+    /* ── Bulk bar ── */
+    #bulkBar { display:none; background:#1e40af; color:#fff; padding:8px 24px; align-items:center; gap:12px; font-size:.85rem; }
+    #bulkBar.visible { display:flex; }
+    #bulkBar strong { margin-right:4px; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:.82rem; }
+    thead th { background:#f9fafb; padding:10px 12px; text-align:left; font-weight:700; color:var(--sub); border-bottom:2px solid var(--border); white-space:nowrap; }
+    tbody tr { border-bottom:1px solid var(--border); transition:background .1s; }
+    tbody tr:hover { background:#f9fafb; }
+    tbody td { padding:9px 12px; vertical-align:middle; }
+    td.mono { font-family:monospace; font-size:.8rem; }
+
+    /* ── Status badge ── */
+    .badge { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:999px; font-size:.72rem; font-weight:700; white-space:nowrap; }
+    .badge-Pending { background:#f3f4f6; color:var(--pending); }
+    .badge-Pushing { background:#fffbeb; color:var(--pushing); }
+    .badge-Pushed  { background:#f0fdf4; color:var(--pushed); }
+    .badge-Failed  { background:#fef2f2; color:var(--failed); }
+    .badge .dot    { width:6px; height:6px; border-radius:50%; background:currentColor; }
+    .badge-Pushing .dot { animation:pulse 1s infinite; }
+
+    /* ── Row push btn ── */
+    .push-btn { padding:4px 10px; border-radius:5px; border:1.5px solid var(--primary); background:#fff; color:var(--primary); font-size:.75rem; font-weight:600; cursor:pointer; transition:all .15s; white-space:nowrap; }
+    .push-btn:hover { background:var(--primary); color:#fff; }
+    .push-btn:disabled { opacity:.4; cursor:not-allowed; }
+
+    /* ── Error cell ── */
+    .err-cell { color:var(--failed); font-size:.75rem; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:help; }
+
+    /* ── Pagination ── */
+    .pagination { display:flex; align-items:center; justify-content:center; gap:6px; padding:16px; flex-wrap:wrap; }
+    .pg-btn { padding:5px 11px; border-radius:6px; border:1.5px solid var(--border); background:#fff; font-size:.8rem; cursor:pointer; min-width:32px; text-align:center; }
+    .pg-btn:hover:not(:disabled) { background:#eff6ff; border-color:var(--primary); }
+    .pg-btn.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .pg-btn:disabled { opacity:.4; cursor:default; }
+    .pg-info { font-size:.8rem; color:var(--sub); margin:0 8px; }
+
+    /* ── Result panel (slide in from bottom) ── */
+    #resultPanel { position:fixed; bottom:-300px; left:50%; transform:translateX(-50%); width:min(640px,92vw); background:#fff; border-radius:12px 12px 0 0; box-shadow:0 -4px 30px rgba(0,0,0,.15); transition:bottom .35s ease; z-index:1000; padding:20px 24px; }
+    #resultPanel.open { bottom:0; }
+    #resultPanel .rp-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+    #resultPanel .rp-title { font-weight:700; font-size:1rem; }
+    #resultPanel .rp-close { cursor:pointer; font-size:1.2rem; color:var(--sub); border:none; background:none; padding:2px 6px; }
+    .rp-stats { display:flex; gap:16px; margin-bottom:14px; }
+    .rp-stat { text-align:center; }
+    .rp-stat .val { font-size:1.4rem; font-weight:800; }
+    .rp-stat .lbl { font-size:.72rem; color:var(--sub); }
+    .rp-stat.ok .val  { color:var(--pushed); }
+    .rp-stat.bad .val { color:var(--failed); }
+    #failedList { max-height:140px; overflow-y:auto; font-size:.78rem; }
+    #failedList .fi { padding:4px 0; border-bottom:1px solid var(--border); display:flex; gap:8px; }
+    #failedList .fi .fk { font-weight:700; min-width:100px; }
+    #failedList .fi .fe { color:var(--failed); }
+
+    /* ── Toast ── */
+    #toast { position:fixed; bottom:24px; right:24px; background:#1e293b; color:#fff; padding:10px 18px; border-radius:8px; font-size:.82rem; opacity:0; pointer-events:none; transition:opacity .3s; z-index:2000; max-width:340px; }
+    #toast.show { opacity:1; }
+
+    /* ── Empty state ── */
+    .empty-state { text-align:center; padding:60px 20px; color:var(--sub); }
+    .empty-state .ei { font-size:2.5rem; margin-bottom:12px; }
+  </style>
+</head>
+<body>
+<div id="loadBar"></div>
+
+<nav class="topnav">
+  <div class="brand">&#128260; SFA Push</div>
+  <a href="index.html">Home</a>
+  <a href="products.html">Product Master</a>
+  <a href="master.html?type=pricelists">Price Lists</a>
+  <a href="master.html?type=businesspartners">Business Partners</a>
+  <a href="master.html?type=schemes">Schemes</a>
+  <a href="master.html?type=stockInventory">Stock</a>
+  <a href="master.html?type=outstanding">Outstanding</a>
+</nav>
+
+<div class="hero">
+  <h1 id="pageTitle">&#128230; Master Data</h1>
+  <p id="pageDesc">View records, track push status, and sync to Salesforce.</p>
+</div>
+
+<div class="summary-bar">
+  <div class="pill pill-all active" data-status="" onclick="filterByStatus(this, '')">
+    <span class="dot"></span> All &nbsp;<span id="sumAll">—</span>
+  </div>
+  <div class="pill pill-Pending" data-status="Pending" onclick="filterByStatus(this, 'Pending')">
+    <span class="dot"></span> Pending &nbsp;<span id="sumPending">0</span>
+  </div>
+  <div class="pill pill-Pushing" data-status="Pushing" onclick="filterByStatus(this, 'Pushing')">
+    <span class="dot"></span> In Progress &nbsp;<span id="sumPushing">0</span>
+  </div>
+  <div class="pill pill-Pushed" data-status="Pushed" onclick="filterByStatus(this, 'Pushed')">
+    <span class="dot"></span> Pushed &nbsp;<span id="sumPushed">0</span>
+  </div>
+  <div class="pill pill-Failed" data-status="Failed" onclick="filterByStatus(this, 'Failed')">
+    <span class="dot"></span> Failed &nbsp;<span id="sumFailed">0</span>
+  </div>
+</div>
+
+<div class="toolbar">
+  <input type="text" id="searchBox" placeholder="Search..." oninput="debouncedSearch()" />
+  <select id="pageSizeSelect" onchange="changePageSize()">
+    <option value="25">25 / page</option>
+    <option value="50" selected>50 / page</option>
+    <option value="100">100 / page</option>
+  </select>
+  <button class="btn btn-outline" onclick="loadPage(currentPage)">&#8635; Refresh</button>
+  <button class="btn btn-primary" id="pushAllBtn" onclick="pushAll()">&#8679; Push All Matching</button>
+</div>
+
+<div id="bulkBar">
+  <strong><span id="selCount">0</span> selected</strong>
+  <button class="btn btn-primary" onclick="pushSelected()">&#8679; Push Selected</button>
+  <button class="btn btn-outline" style="color:#fff;border-color:#fff" onclick="clearSelection()">Clear</button>
+</div>
+
+<div class="table-wrap">
+  <table id="mainTable">
+    <thead id="tableHead"></thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+  <div id="emptyState" class="empty-state" style="display:none">
+    <div class="ei">&#128230;</div>
+    <div>No records found</div>
+  </div>
+</div>
+
+<div class="pagination" id="paginationBar"></div>
+
+<!-- Result panel -->
+<div id="resultPanel">
+  <div class="rp-header">
+    <div class="rp-title">Push Result</div>
+    <button class="rp-close" onclick="closePanel()">&#10005;</button>
+  </div>
+  <div class="rp-stats">
+    <div class="rp-stat"><div class="val" id="rpTotal">0</div><div class="lbl">Requested</div></div>
+    <div class="rp-stat ok"><div class="val" id="rpOk">0</div><div class="lbl">Success</div></div>
+    <div class="rp-stat bad"><div class="val" id="rpFail">0</div><div class="lbl">Failed</div></div>
+  </div>
+  <div id="failedList"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Config per master type ─────────────────────────────────────────────────
+const MASTER_CONFIG = {
+  pricelists: {
+    title: 'Price Lists',
+    desc:  'View price records per product, track push status, sync to Salesforce.',
+    icon:  '&#128176;',
+    recordKeyField: 'ProductCode',
+    columns: [
+      { key: 'ProductCode', label: 'Product Code', cls: 'mono' },
+      { key: 'ProductName', label: 'Product Name' },
+      { key: 'Brand',       label: 'Brand' },
+      { key: 'PriceEntries', label: 'Entries', align: 'right' },
+      { key: 'StateCount',   label: 'States',  align: 'right' },
+      { key: 'MinPrice',     label: 'Min Price', align: 'right', fmt: fmtNum },
+      { key: 'MaxPrice',     label: 'Max Price', align: 'right', fmt: fmtNum },
+    ],
+  },
+  businesspartners: {
+    title: 'Business Partners',
+    desc:  'View dealer/customer master data and sync to Salesforce.',
+    icon:  '&#128101;',
+    recordKeyField: 'BPCode',
+    columns: [
+      { key: 'BPCode',      label: 'BP Code',    cls: 'mono' },
+      { key: 'BPName',      label: 'BP Name' },
+      { key: 'BPCategory',  label: 'Category' },
+      { key: 'AreaCode',    label: 'Area' },
+      { key: 'GradeOfBP',   label: 'Grade' },
+      { key: 'City',        label: 'City' },
+      { key: 'GSTNo',       label: 'GST No', cls: 'mono' },
+      { key: 'Phone1',      label: 'Phone', cls: 'mono' },
+    ],
+  },
+  schemes: {
+    title: 'Schemes / Promotions',
+    desc:  'View scheme policies and sync to Salesforce.',
+    icon:  '&#128221;',
+    recordKeyField: 'DocEntry',
+    columns: [
+      { key: 'PolicyNumber', label: 'Policy No', cls: 'mono' },
+      { key: 'PolicyName',   label: 'Scheme Name' },
+      { key: 'DivisionCode', label: 'Division' },
+      { key: 'DiscountBasis', label: 'Discount Basis' },
+      { key: 'FromDate',     label: 'From' },
+      { key: 'ToDate',       label: 'To' },
+      { key: 'LineCount',    label: 'Lines', align: 'right' },
+    ],
+  },
+  stockInventory: {
+    title: 'Stock Inventory',
+    desc:  'View stock levels per product and sync to Salesforce.',
+    icon:  '&#128200;',
+    recordKeyField: 'ProductCode',
+    columns: [
+      { key: 'ProductCode',   label: 'Product Code', cls: 'mono' },
+      { key: 'ProductName',   label: 'Product Name' },
+      { key: 'Brand',         label: 'Brand' },
+      { key: 'StyleCode',     label: 'Style' },
+      { key: 'StockQuantity', label: 'Stock Qty', align: 'right' },
+    ],
+  },
+  outstanding: {
+    title: 'Outstanding / Receivables',
+    desc:  'View outstanding balances per dealer and sync to Salesforce.',
+    icon:  '&#128203;',
+    recordKeyField: 'CardCode',
+    columns: [
+      { key: 'CardCode',       label: 'Card Code', cls: 'mono' },
+      { key: 'CardName',       label: 'Name' },
+      { key: 'DivisionCode',   label: 'Division' },
+      { key: 'City',           label: 'City' },
+      { key: 'InvoiceCount',   label: 'Invoices', align: 'right' },
+      { key: 'TotalBalance',   label: 'Total Balance', align: 'right', fmt: fmtNum },
+      { key: 'MaxOverdueDays', label: 'Max Overdue Days', align: 'right' },
+    ],
+  },
+};
+
+function fmtNum(v) {
+  if (v == null) return '—';
+  return Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ── State ─────────────────────────────────────────────────────────────────
+const params      = new URLSearchParams(location.search);
+const masterType  = params.get('type') || 'pricelists';
+const cfg         = MASTER_CONFIG[masterType] || MASTER_CONFIG.pricelists;
+const API_BASE    = `/api/master/${masterType}`;
+
+let currentPage   = 1;
+let currentLimit  = 50;
+let currentSearch = '';
+let currentStatus = '';
+let totalPages    = 1;
+let pushingKeys   = new Set();
+let selectedKeys  = new Set();
+let pollTimer     = null;
+let searchTimer   = null;
+
+// ── Init ──────────────────────────────────────────────────────────────────
+document.title = `SFA Push — ${cfg.title}`;
+document.getElementById('pageTitle').innerHTML = `${cfg.icon} ${cfg.title}`;
+document.getElementById('pageDesc').textContent = cfg.desc;
+
+// Mark active nav link
+document.querySelectorAll('.topnav a').forEach(a => {
+  const url = new URL(a.href, location.href);
+  if (url.pathname === location.pathname && url.search === location.search) a.classList.add('active');
+});
+
+buildTableHead();
+loadPage(1);
+
+// ── Build table header ────────────────────────────────────────────────────
+function buildTableHead() {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<th style="width:36px"><input type="checkbox" id="selectAll" onchange="toggleAll(this.checked)" /></th>`;
+  for (const col of cfg.columns) {
+    tr.innerHTML += `<th>${col.label}</th>`;
+  }
+  tr.innerHTML += `<th>Push Status</th><th>Last Pushed</th><th>Last Error</th><th style="width:80px">Action</th>`;
+  document.getElementById('tableHead').appendChild(tr);
+}
+
+// ── Load a page ───────────────────────────────────────────────────────────
+async function loadPage(page) {
+  currentPage = page;
+  showLoad(true);
+  try {
+    const qs = new URLSearchParams({
+      page:   currentPage,
+      limit:  currentLimit,
+      ...(currentSearch ? { search: currentSearch } : {}),
+      ...(currentStatus ? { pushStatus: currentStatus } : {}),
+    });
+    const res  = await fetch(`${API_BASE}/list?${qs}`);
+    const data = await res.json();
+    if (!data.success) { showToast('Error: ' + data.error); return; }
+    renderTable(data.data);
+    renderPagination(data.total, data.totalPages);
+    updateSummary(data.summary, data.total);
+  } catch (e) { showToast('Network error: ' + e.message); }
+  finally { showLoad(false); }
+}
+
+// ── Render table ──────────────────────────────────────────────────────────
+function renderTable(rows) {
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+  const empty = document.getElementById('emptyState');
+  if (!rows.length) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  for (const row of rows) {
+    const key      = String(row[cfg.recordKeyField]);
+    const status   = row.PushStatus || 'Pending';
+    const isPushing = status === 'Pushing';
+    if (isPushing) pushingKeys.add(key); else pushingKeys.delete(key);
+    const isSelected = selectedKeys.has(key);
+
+    const tr = document.createElement('tr');
+    tr.dataset.key = key;
+
+    let cells = `<td><input type="checkbox" class="row-cb" data-key="${key}" ${isSelected ? 'checked' : ''} onchange="toggleRow('${escAttr(key)}', this.checked)" /></td>`;
+    for (const col of cfg.columns) {
+      const val = row[col.key];
+      const display = col.fmt ? col.fmt(val) : (val ?? '—');
+      const cls = col.cls || '';
+      const align = col.align === 'right' ? 'text-align:right' : '';
+      cells += `<td class="${cls}" style="${align}">${escHtml(String(display))}</td>`;
+    }
+
+    const lastPushed = row.LastPushedAt
+      ? new Date(row.LastPushedAt).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })
+      : '—';
+    const errText = row.PushError || '';
+
+    cells += `
+      <td><span class="badge badge-${status}"><span class="dot"></span>${status}</span></td>
+      <td style="white-space:nowrap;font-size:.78rem">${lastPushed}</td>
+      <td><span class="err-cell" title="${escAttr(errText)}">${escHtml(errText)}</span></td>
+      <td><button class="push-btn" data-key="${escAttr(key)}" onclick="pushSingle('${escAttr(key)}')" ${isPushing ? 'disabled' : ''}>
+        ${isPushing ? '...' : '&#8679; Push'}
+      </button></td>
+    `;
+    tr.innerHTML = cells;
+    tbody.appendChild(tr);
+  }
+  updateSelectAll();
+  schedulePoll();
+}
+
+// ── Pagination ────────────────────────────────────────────────────────────
+function renderPagination(total, pages) {
+  totalPages = pages;
+  const bar = document.getElementById('paginationBar');
+  bar.innerHTML = '';
+
+  const info = document.createElement('span');
+  info.className = 'pg-info';
+  info.textContent = `${total.toLocaleString()} records`;
+  bar.appendChild(info);
+
+  const addBtn = (label, page, disabled, active) => {
+    const b = document.createElement('button');
+    b.className = 'pg-btn' + (active ? ' active' : '');
+    b.textContent = label;
+    b.disabled = disabled;
+    if (!disabled && !active) b.onclick = () => loadPage(page);
+    bar.appendChild(b);
+  };
+
+  addBtn('‹', currentPage - 1, currentPage === 1);
+  const range = pageRange(currentPage, pages);
+  let prev = null;
+  for (const p of range) {
+    if (prev !== null && p - prev > 1) {
+      const ell = document.createElement('span');
+      ell.className = 'pg-info'; ell.textContent = '…';
+      bar.appendChild(ell);
+    }
+    addBtn(p, p, false, p === currentPage);
+    prev = p;
+  }
+  addBtn('›', currentPage + 1, currentPage === pages);
+}
+
+function pageRange(cur, total) {
+  const delta = 2;
+  const pages = [];
+  for (let i = Math.max(1, cur - delta); i <= Math.min(total, cur + delta); i++) pages.push(i);
+  if (pages[0] > 1) pages.unshift(1);
+  if (pages[pages.length - 1] < total) pages.push(total);
+  return pages;
+}
+
+// ── Summary pills ─────────────────────────────────────────────────────────
+function updateSummary(summary, total) {
+  document.getElementById('sumAll').textContent     = total.toLocaleString();
+  document.getElementById('sumPending').textContent = (summary.Pending || 0).toLocaleString();
+  document.getElementById('sumPushing').textContent = (summary.Pushing || 0).toLocaleString();
+  document.getElementById('sumPushed').textContent  = (summary.Pushed  || 0).toLocaleString();
+  document.getElementById('sumFailed').textContent  = (summary.Failed  || 0).toLocaleString();
+}
+
+function filterByStatus(el, status) {
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  currentStatus = status;
+  loadPage(1);
+}
+
+// ── Search ────────────────────────────────────────────────────────────────
+function debouncedSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    currentSearch = document.getElementById('searchBox').value.trim();
+    loadPage(1);
+  }, 400);
+}
+
+function changePageSize() {
+  currentLimit = parseInt(document.getElementById('pageSizeSelect').value, 10);
+  loadPage(1);
+}
+
+// ── Selection ─────────────────────────────────────────────────────────────
+function toggleRow(key, checked) {
+  if (checked) selectedKeys.add(key); else selectedKeys.delete(key);
+  updateBulkBar();
+  updateSelectAll();
+}
+
+function toggleAll(checked) {
+  document.querySelectorAll('.row-cb').forEach(cb => {
+    const key = cb.dataset.key;
+    cb.checked = checked;
+    if (checked) selectedKeys.add(key); else selectedKeys.delete(key);
+  });
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  document.getElementById('selCount').textContent = selectedKeys.size;
+  if (selectedKeys.size > 0) bar.classList.add('visible');
+  else bar.classList.remove('visible');
+}
+
+function updateSelectAll() {
+  const cbs = document.querySelectorAll('.row-cb');
+  const allChecked = cbs.length > 0 && [...cbs].every(cb => selectedKeys.has(cb.dataset.key));
+  document.getElementById('selectAll').checked = allChecked;
+}
+
+function clearSelection() {
+  selectedKeys.clear();
+  document.querySelectorAll('.row-cb').forEach(cb => cb.checked = false);
+  document.getElementById('selectAll').checked = false;
+  updateBulkBar();
+}
+
+// ── Push single ───────────────────────────────────────────────────────────
+async function pushSingle(key) {
+  const btn = document.querySelector(`.push-btn[data-key="${CSS.escape(key)}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  pushingKeys.add(key);
+
+  try {
+    const res  = await fetch(`${API_BASE}/push`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recordKeys: [key] }),
+    });
+    const data = await res.json();
+    showResult(data);
+    loadPage(currentPage);
+  } catch (e) { showToast('Push failed: ' + e.message); }
+}
+
+// ── Push selected ─────────────────────────────────────────────────────────
+async function pushSelected() {
+  const keys = [...selectedKeys];
+  if (!keys.length) return;
+  document.getElementById('pushAllBtn').disabled = true;
+  try {
+    const res  = await fetch(`${API_BASE}/push`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recordKeys: keys }),
+    });
+    const data = await res.json();
+    clearSelection();
+    showResult(data);
+    loadPage(currentPage);
+  } catch (e) { showToast('Push failed: ' + e.message); }
+  finally { document.getElementById('pushAllBtn').disabled = false; }
+}
+
+// ── Push all ──────────────────────────────────────────────────────────────
+async function pushAll() {
+  const btn = document.getElementById('pushAllBtn');
+  btn.disabled = true;
+  try {
+    const body = {};
+    if (currentSearch) body.search = currentSearch;
+    if (currentStatus) body.pushStatus = currentStatus;
+    const res  = await fetch(`${API_BASE}/push-all`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Push-all started in background. Refreshing...');
+      setTimeout(() => loadPage(1), 1500);
+    } else {
+      showToast('Error: ' + data.error);
+    }
+  } catch (e) { showToast('Push-all failed: ' + e.message); }
+  finally { btn.disabled = false; }
+}
+
+// ── Result panel ──────────────────────────────────────────────────────────
+function showResult(data) {
+  document.getElementById('rpTotal').textContent = data.totalRequested ?? (data.successCount + data.failedCount);
+  document.getElementById('rpOk').textContent    = data.successCount ?? 0;
+  document.getElementById('rpFail').textContent  = data.failedCount  ?? 0;
+
+  const fl = document.getElementById('failedList');
+  fl.innerHTML = '';
+  for (const f of (data.failedRecords || [])) {
+    const div = document.createElement('div');
+    div.className = 'fi';
+    div.innerHTML = `<span class="fk">${escHtml(String(f.key))}</span><span class="fe">${escHtml(String(f.error || ''))}</span>`;
+    fl.appendChild(div);
+  }
+  document.getElementById('resultPanel').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('resultPanel').classList.remove('open');
+}
+
+// ── Auto poll ─────────────────────────────────────────────────────────────
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  const delay = pushingKeys.size > 0 ? 3500 : 30000;
+  pollTimer = setTimeout(() => loadPage(currentPage), delay);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function showLoad(on) {
+  const bar = document.getElementById('loadBar');
+  bar.style.width = on ? '60%' : '100%';
+  if (!on) setTimeout(() => { bar.style.width = '0'; }, 400);
+}
+
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+  return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>

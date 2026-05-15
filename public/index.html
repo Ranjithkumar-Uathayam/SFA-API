@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SFA Push — Home</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --primary: #1a56db; --border: #e5e7eb; --bg: #f0f2f5; --card: #fff; --text: #111827; --sub: #6b7280; --radius: 10px; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    .topnav { background: linear-gradient(135deg,#1a56db 0%,#0e3a8c 100%); color:#fff; padding:0 24px; display:flex; align-items:center; gap:0; height:52px; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+    .topnav .brand { font-weight:700; font-size:.95rem; margin-right:24px; }
+    .topnav a { color:rgba(255,255,255,.75); text-decoration:none; font-size:.82rem; padding:0 14px; height:52px; display:flex; align-items:center; border-bottom:3px solid transparent; transition:color .15s,border-color .15s; }
+    .topnav a:hover { color:#fff; }
+    .topnav a.active { color:#fff; border-bottom-color:#fff; }
+
+    .hero { background: linear-gradient(135deg,#1a56db 0%,#0e3a8c 100%); color:#fff; padding:48px 24px 40px; text-align:center; }
+    .hero h1 { font-size:2rem; font-weight:800; margin-bottom:8px; }
+    .hero p  { font-size:1rem; opacity:.8; max-width:520px; margin:0 auto; }
+
+    .container { max-width:960px; margin:0 auto; padding:32px 20px; }
+    .section-title { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--sub); margin-bottom:14px; }
+
+    .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:16px; }
+    .master-card {
+      background:var(--card); border-radius:var(--radius); border:1px solid var(--border);
+      padding:22px 20px; text-decoration:none; color:inherit;
+      transition:transform .15s, box-shadow .15s, border-color .15s;
+      display:flex; flex-direction:column; gap:8px;
+      box-shadow:0 1px 3px rgba(0,0,0,.08);
+    }
+    .master-card:hover { transform:translateY(-3px); box-shadow:0 8px 24px rgba(0,0,0,.12); border-color:var(--primary); }
+    .master-card .mc-icon { font-size:1.8rem; }
+    .master-card .mc-title { font-weight:700; font-size:1rem; }
+    .master-card .mc-desc  { font-size:.8rem; color:var(--sub); line-height:1.5; }
+    .master-card .mc-badge { font-size:.7rem; background:#eff6ff; color:var(--primary); padding:3px 8px; border-radius:999px; font-weight:600; align-self:flex-start; margin-top:4px; }
+    .master-card.coming .mc-badge { background:#f3f4f6; color:var(--sub); }
+    .master-card.coming { opacity:.65; pointer-events:none; }
+  </style>
+</head>
+<body>
+<nav class="topnav">
+  <div class="brand">&#128260; SFA Push</div>
+  <a href="index.html" class="active">Home</a>
+  <a href="products.html">Product Master</a>
+  <a href="master.html?type=pricelists">Price Lists</a>
+  <a href="master.html?type=businesspartners">Business Partners</a>
+  <a href="master.html?type=schemes">Schemes</a>
+  <a href="master.html?type=stockInventory">Stock</a>
+  <a href="master.html?type=outstanding">Outstanding</a>
+</nav>
+
+<div class="hero">
+  <h1>&#128260; SFA Push Dashboard</h1>
+  <p>Manage and monitor Salesforce sync pushes for all master data modules.</p>
+</div>
+
+<div class="container">
+  <div class="section-title">Master Data Screens</div>
+  <div class="grid">
+
+    <a href="products.html" class="master-card">
+      <div class="mc-icon">&#128230;</div>
+      <div class="mc-title">Product Master</div>
+      <div class="mc-desc">View all products, track push status per record, push single or in bulk to Salesforce.</div>
+      <div class="mc-badge">&#9679; Live</div>
+    </a>
+
+    <a href="master.html?type=pricelists" class="master-card">
+      <div class="mc-icon">&#128176;</div>
+      <div class="mc-title">Price Lists</div>
+      <div class="mc-desc">Manage pricing by state and brand, track which price records have been pushed.</div>
+      <div class="mc-badge">&#9679; Live</div>
+    </a>
+
+    <a href="master.html?type=businesspartners" class="master-card">
+      <div class="mc-icon">&#128101;</div>
+      <div class="mc-title">Business Partners</div>
+      <div class="mc-desc">View and push dealer/customer master data with individual push tracking.</div>
+      <div class="mc-badge">&#9679; Live</div>
+    </a>
+
+    <a href="master.html?type=schemes" class="master-card">
+      <div class="mc-icon">&#128221;</div>
+      <div class="mc-title">Schemes / Promotions</div>
+      <div class="mc-desc">Track promotion scheme push status per scheme policy.</div>
+      <div class="mc-badge">&#9679; Live</div>
+    </a>
+
+    <a href="master.html?type=stockInventory" class="master-card">
+      <div class="mc-icon">&#128200;</div>
+      <div class="mc-title">Stock Inventory</div>
+      <div class="mc-desc">Push stock levels per product/warehouse to Salesforce.</div>
+      <div class="mc-badge">&#9679; Live</div>
+    </a>
+
+    <a href="master.html?type=outstanding" class="master-card">
+      <div class="mc-icon">&#128203;</div>
+      <div class="mc-title">Outstanding / Receivables</div>
+      <div class="mc-desc">Push outstanding invoice data per dealer to Salesforce.</div>
+      <div class="mc-badge">&#9679; Live</div>
+    </a>
+
+  </div>
+</div>
+</body>
+</html>

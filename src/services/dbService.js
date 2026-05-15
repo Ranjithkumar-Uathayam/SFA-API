@@ -1298,8 +1298,8 @@ async function getSchemesPaged({ page = 1, limit = 50, search, pushStatus } = {}
         WITH SchemeSummary AS (
             SELECT
                 T0.DocEntry,
-                CAST(CONCAT(T0.[Object], T0.DocNum) AS NVARCHAR(50)) AS PolicyNumber,
-                T0.Remark                                             AS PolicyName,
+                CAST(CONCAT(CAST(T0.[Object] AS NVARCHAR(50)), T0.DocNum) AS NVARCHAR(60)) AS PolicyNumber,
+                CAST(T0.Remark AS NVARCHAR(500))                      AS PolicyName,
                 MAX(CASE
                     WHEN T1.U_bran LIKE '%UATHAYAM%' THEN 'UATHAYAM'
                     WHEN T1.U_bran LIKE '%ARISER%'   THEN 'ARISER'
@@ -1311,7 +1311,7 @@ async function getSchemesPaged({ page = 1, limit = 50, search, pushStatus } = {}
             FROM [BBLive].[dbo]."@SCHEM" T0
             INNER JOIN [BBLive].[dbo]."@SCHEML" T1 ON T0.DocEntry = T1.DocEntry
             WHERE T0.U_FrmDt >= '20250701' AND T0.U_ToDt <= '20260531'
-            GROUP BY T0.DocEntry, T0.DocNum, T0.[Object], T0.Remark, T0.U_FrmDt, T0.U_ToDt
+            GROUP BY T0.DocEntry, T0.DocNum, CAST(T0.[Object] AS NVARCHAR(50)), CAST(T0.Remark AS NVARCHAR(500)), T0.U_FrmDt, T0.U_ToDt
         )
         SELECT
             COUNT(*) OVER()                             AS TotalCount,

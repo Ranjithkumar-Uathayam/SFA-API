@@ -520,7 +520,8 @@ async function pushSingle(key) {
       body: JSON.stringify({ recordKeys: [key] }),
     });
     const data = await res.json();
-    showResult(data);
+    if (!res.ok && data.error) { showToast('Error: ' + data.error); }
+    else showResult(data);
     loadPage(currentPage);
   } catch (e) { showToast('Push failed: ' + e.message); }
 }
@@ -537,7 +538,8 @@ async function pushSelected() {
     });
     const data = await res.json();
     clearSelection();
-    showResult(data);
+    if (!res.ok && data.error) showToast('Error: ' + data.error);
+    else showResult(data);
     loadPage(currentPage);
   } catch (e) { showToast('Push failed: ' + e.message); }
   finally { document.getElementById('pushAllBtn').disabled = false; }
@@ -568,9 +570,11 @@ async function pushAll() {
 
 // ── Result panel ──────────────────────────────────────────────────────────
 function showResult(data) {
-  document.getElementById('rpTotal').textContent = data.totalRequested ?? (data.successCount + data.failedCount);
-  document.getElementById('rpOk').textContent    = data.successCount ?? 0;
-  document.getElementById('rpFail').textContent  = data.failedCount  ?? 0;
+  const ok   = data.successCount ?? 0;
+  const fail = data.failedCount  ?? 0;
+  document.getElementById('rpTotal').textContent = data.totalRequested ?? (ok + fail);
+  document.getElementById('rpOk').textContent    = ok;
+  document.getElementById('rpFail').textContent  = fail;
 
   const fl = document.getElementById('failedList');
   fl.innerHTML = '';

@@ -31,8 +31,9 @@ const MASTERS = {
         recordKeyField: 'BPCode',
         fetchPaged:    (opts)  => dbService.getBPListPaged(opts),
         fetchByCodes:  (codes) => dbService.getBPMasterDataByCodes(codes),
-        mapPayload:    (rows)  => mapper.mapToBPPayload(rows),
-        sfPush:        (pl)    => sfService.upsertBusinessPartners(pl),
+        // mapToBPPayload returns { businessPartners:[...] } — normalize to array so the controller can check .length
+        mapPayload:    (rows)  => (mapper.mapToBPPayload(rows).businessPartners || []),
+        sfPush:        (bps)   => sfService.upsertBusinessPartners({ businessPartners: bps }),
         // failedDetails: [{code:BPCode, error}]
         extractResults(sfResult, requestedKeys) {
             const failedMap = {};

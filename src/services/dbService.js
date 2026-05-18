@@ -621,7 +621,6 @@ async function getBPMasterData() {
             WHERE T0.CardType = 'C'
             AND T0.validFor = 'Y'
             AND T0.U_AreaCode != ''
-            AND T0.CardCode in ('C035580')
             ORDER BY T0.CardCode, SB.DivisionCode, SB.SubBrandName`
 
         const result = await pool.request().query(query);

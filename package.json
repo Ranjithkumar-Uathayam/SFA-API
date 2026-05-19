@@ -9,10 +9,12 @@
             "node18-win-x64"
         ],
         "assets": [
-            "api/**/*",
-            "node_modules/**/*",
             "src/**/*",
-            "/**/*"
+            "node_modules/axios/dist/node/*.cjs",
+            "node_modules/axios/dist/browser/*.cjs",
+            "node_modules/mssql/**/*",
+            "node_modules/tedious/**/*",
+            "node_modules/msnodesqlv8/**/*"
         ]
     },
     "scripts": {
@@ -24,6 +26,7 @@
     "license": "ISC",
     "type": "commonjs",
     "dependencies": {
+        "axios": "^1.16.1",
         "cors": "^2.8.5",
         "dotenv": "^16.4.5",
         "express": "^4.19.2",

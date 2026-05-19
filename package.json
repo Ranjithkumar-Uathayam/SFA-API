@@ -9,8 +9,10 @@
             "node18-win-x64"
         ],
         "assets": [
-            "public/**/*",
-            "node_modules/**/*"
+            "api/**/*",
+            "node_modules/**/*",
+            "src/**/*",
+            "/**/*"
         ]
     },
     "scripts": {

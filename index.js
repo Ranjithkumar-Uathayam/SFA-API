@@ -47,8 +47,22 @@ const PORT = process.env.PORT || 3100;
 app.use(cors());
 app.use(express.json());
 
-// Serve frontend dashboard
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve Angular frontend (production build)
+const angularDist = path.join(__dirname, 'frontend', 'dist', 'sfa-ui', 'browser');
+app.use(express.static(angularDist));
+// Fallback: serve index.html for Angular client-side routing
+app.get('/', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    const indexFile = path.join(angularDist, 'index.html');
+    require('fs').access(indexFile, require('fs').constants.F_OK, (err) => {
+        if (err) {
+            // Angular not built yet — serve old static public folder
+            res.sendFile(path.join(__dirname, 'public', 'index.html'));
+        } else {
+            res.sendFile(indexFile);
+        }
+    });
+});
 
 // ── Existing sync routes ───────────────────────────────────────────────────
 app.post('/api/sync/products',          syncController.syncProducts);
@@ -77,6 +91,15 @@ app.post('/api/master/:masterType/push-all', masterController.pushAllMasterRecor
 // Health check (JSON for API consumers)
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', service: 'SFA API', port: PORT });
+});
+
+// Angular catch-all — serves index.html for any non-API route
+app.get('*', (req, res) => {
+    const indexFile = path.join(angularDist, 'index.html');
+    require('fs').access(indexFile, require('fs').constants.F_OK, (err) => {
+        if (err) res.sendFile(path.join(__dirname, 'public', 'index.html'));
+        else     res.sendFile(indexFile);
+    });
 });
 
 app.listen(PORT, () => {

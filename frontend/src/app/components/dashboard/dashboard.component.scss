@@ -1,0 +1,64 @@
+.hero {
+  background: linear-gradient(135deg, #1a56db 0%, #0e3a8c 100%);
+  color: #fff;
+  padding: 48px 24px 40px;
+  text-align: center;
+
+  h1 { font-size: 2rem; font-weight: 800; margin-bottom: 8px; }
+  p  { font-size: 1rem; opacity: 0.8; max-width: 520px; margin: 0 auto; }
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+.section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--sub);
+  margin-bottom: 14px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.master-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  padding: 22px 20px;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    border-color: var(--primary);
+  }
+
+  .mc-icon  { font-size: 1.8rem; }
+  .mc-title { font-weight: 700; font-size: 1rem; }
+  .mc-desc  { font-size: 0.8rem; color: var(--sub); line-height: 1.5; }
+  .mc-badge {
+    font-size: 0.7rem;
+    background: #eff6ff;
+    color: var(--primary);
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-weight: 600;
+    align-self: flex-start;
+    margin-top: 4px;
+  }
+}

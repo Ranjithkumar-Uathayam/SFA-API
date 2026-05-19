@@ -8,3 +8,4 @@ logs
 .env
 .env2
 *.exe
+.claude

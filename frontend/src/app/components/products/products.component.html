@@ -1,0 +1,245 @@
+<div class="loading-bar" [class.visible]="loading"></div>
+
+<div class="page-header">
+  <h1>Product Master</h1>
+  <div class="breadcrumb">SFA Push Dashboard &rsaquo; Product Master &mdash; Manage and push product records to Salesforce</div>
+</div>
+
+<div class="container">
+
+  <!-- Summary Pills -->
+  <div class="summary-strip">
+    <div class="stat-pill all"     [class.active]="pushStatusFilter === ''"        (click)="filterByStatus('')">
+      <span class="pill-count">{{ totalRecords }}</span> <span>All</span>
+    </div>
+    <div class="stat-pill pending" [class.active]="pushStatusFilter === 'Pending'"  (click)="filterByStatus('Pending')">
+      <span class="pill-count">{{ summary.Pending ?? 0 }}</span> <span>Pending</span>
+    </div>
+    <div class="stat-pill pushed"  [class.active]="pushStatusFilter === 'Pushed'"   (click)="filterByStatus('Pushed')">
+      <span class="pill-count">{{ summary.Pushed ?? 0 }}</span> <span>Pushed</span>
+    </div>
+    <div class="stat-pill failed"  [class.active]="pushStatusFilter === 'Failed'"   (click)="filterByStatus('Failed')">
+      <span class="pill-count">{{ summary.Failed ?? 0 }}</span> <span>Failed</span>
+    </div>
+    <div class="stat-pill pushing" [class.active]="pushStatusFilter === 'Pushing'"  (click)="filterByStatus('Pushing')">
+      <span class="pill-count">{{ summary.Pushing ?? 0 }}</span> <span>In Progress</span>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="search-wrap">
+      <span class="ico">&#128269;</span>
+      <input type="text" [(ngModel)]="searchInput" (input)="onSearchInput()" placeholder="Search by code or name…" />
+      @if (searchInput) {
+        <button class="search-clear" (click)="clearSearch()">&#10005;</button>
+      }
+    </div>
+
+    <select class="filter-sel" [(ngModel)]="divisionFilter" (change)="onDivisionChange()">
+      <option value="">All Divisions</option>
+      <option value="ARISER">ARISER</option>
+      <option value="UATHAYAM">UATHAYAM</option>
+    </select>
+
+    <div class="toolbar-sep"></div>
+
+    <label class="page-size-label">
+      Show&nbsp;
+      <select class="page-size-sel" [(ngModel)]="pageSize" (change)="onPageSizeChange()">
+        <option [ngValue]="25">25</option>
+        <option [ngValue]="50">50</option>
+        <option [ngValue]="100">100</option>
+        <option [ngValue]="200">200</option>
+      </select>
+    </label>
+
+    <div class="toolbar-right">
+      <span class="page-info">{{ getPageInfo() }}</span>
+      <button class="btn btn-outline btn-sm" (click)="loadProducts(true)">&#8635; Refresh</button>
+      <button class="btn btn-success" [disabled]="loading" (click)="triggerPushAll()">&#9654;&#9654; Push All Matching</button>
+    </div>
+  </div>
+
+  <!-- Bulk Action Bar -->
+  @if (selectionCount > 0) {
+    <div class="bulk-bar">
+      <span class="sel-label">{{ selectionCount }} product{{ selectionCount > 1 ? 's' : '' }} selected</span>
+      <button class="btn btn-sm btn-white-blue" (click)="pushSelected()">&#9654; Push Selected</button>
+      <button class="btn btn-sm btn-ghost-white" (click)="clearSelection()">&#10005; Clear Selection</button>
+    </div>
+  }
+
+  <!-- Table -->
+  <div class="table-card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px">
+              <input type="checkbox" #selectAllRef
+                (change)="toggleSelectAll($any($event.target).checked)" />
+            </th>
+            <th style="width:36px">#</th>
+            <th>Product Code</th>
+            <th>Product Name</th>
+            <th>Division</th>
+            <th>Category</th>
+            <th>Style</th>
+            <th>Size</th>
+            <th>Color</th>
+            <th>UOM</th>
+            <th>HSN Code</th>
+            <th>Active</th>
+            <th style="min-width:110px">Push Status</th>
+            <th>Last Pushed</th>
+            <th>Last Error</th>
+            <th style="min-width:90px">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (loading && products.length === 0) {
+            <tr><td colspan="16"><div class="empty-state"><div class="empty-icon">&#128260;</div>Loading products…</div></td></tr>
+          }
+          @if (!loading && products.length === 0) {
+            <tr><td colspan="16"><div class="empty-state"><div class="empty-icon">&#128260;</div>No products found matching your filters.</div></td></tr>
+          }
+          @for (p of products; track p.ProductCode; let i = $index) {
+            <tr [class.pushing]="isRowPushing(p.ProductCode)"
+                [class.selected]="isRowSelected(p.ProductCode)">
+              <td>
+                <input type="checkbox"
+                  [checked]="isRowSelected(p.ProductCode)"
+                  [disabled]="isRowPushing(p.ProductCode)"
+                  (change)="toggleRow(p.ProductCode, $any($event.target).checked)" />
+              </td>
+              <td class="cell-sub">{{ rowIndex(i) }}</td>
+              <td><span class="cell-code">{{ p.ProductCode }}</span></td>
+              <td>
+                <div class="cell-name" [title]="p.ProductName">{{ truncate(p.ProductName, 32) }}</div>
+                <div class="cell-sub">{{ p.Brand || '' }}</div>
+              </td>
+              <td class="cell-sm">{{ p.DivisionCode || '—' }}</td>
+              <td class="cell-sm" [title]="p.CategoryName || ''">{{ truncate(p.CategoryName, 14) }}</td>
+              <td class="cell-sm">{{ p.StyleCode || '—' }}</td>
+              <td class="cell-sm">{{ p.SizeCode || '—' }}</td>
+              <td>
+                <div class="cell-sm">{{ p.ColorCode || '—' }}</div>
+                <div class="cell-sub">{{ p.ColorName || '' }}</div>
+              </td>
+              <td class="cell-sm">{{ p.UOM || '—' }}</td>
+              <td class="cell-num">{{ p.HSNCode || '—' }}</td>
+              <td>
+                @if (p.ProductIsActive) {
+                  <span class="badge badge-active">Active</span>
+                } @else {
+                  <span class="badge badge-inactive">Inactive</span>
+                }
+              </td>
+              <td>
+                @if (isRowPushing(p.ProductCode) || p.PushStatus === 'Pushing') {
+                  <span class="badge badge-pushing"><span class="dot"></span>Pushing…</span>
+                } @else if (p.PushStatus === 'Pushed') {
+                  <span class="badge badge-pushed"><span class="dot"></span>Pushed</span>
+                } @else if (p.PushStatus === 'Failed') {
+                  <span class="badge badge-failed"><span class="dot"></span>Failed</span>
+                } @else {
+                  <span class="badge badge-pending"><span class="dot"></span>Pending</span>
+                }
+              </td>
+              <td>
+                @if (p.LastPushedAt) {
+                  <span class="dt">{{ fmtDate(p.LastPushedAt) }}</span>
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </td>
+              <td class="err-cell">
+                @if (p.PushError) {
+                  <span class="err-text" [title]="p.PushError">{{ p.PushError }}</span>
+                } @else {
+                  <span class="text-muted">—</span>
+                }
+              </td>
+              <td>
+                <button class="btn btn-primary btn-xs"
+                  [disabled]="isRowPushing(p.ProductCode)"
+                  (click)="pushSingle(p.ProductCode)">
+                  @if (isRowPushing(p.ProductCode)) {
+                    <span class="spinner"></span>
+                  } @else {
+                    &#9654;
+                  }
+                  Push
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination">
+      <div class="page-info">{{ getPageInfo() }}</div>
+      <div class="page-buttons">
+        <button class="page-btn" [disabled]="currentPage === 1" (click)="goToPage(currentPage - 1)">&#8249;</button>
+        @for (p of getPageNumbers(); track $index) {
+          @if (p === '…') {
+            <span class="ellipsis">…</span>
+          } @else {
+            <button class="page-btn" [class.active]="p === currentPage" (click)="goToPage(+p)">{{ p }}</button>
+          }
+        }
+        <button class="page-btn" [disabled]="currentPage === totalPages" (click)="goToPage(currentPage + 1)">&#8250;</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Result Panel -->
+@if (showResultPanel && resultPanel) {
+  <div class="result-panel open">
+    <div class="rp-header">
+      <span class="rp-title">{{ resultPanel.success ? '✅ Push Completed' : '⚠️ Push Completed with Failures' }}</span>
+      <button class="btn btn-outline btn-sm" (click)="closeResultPanel()">&#10005; Close</button>
+    </div>
+    <div class="rp-body">
+      <div class="rp-stats">
+        <div class="rp-stat total">
+          <div class="rp-stat-label">Total Sent</div>
+          <div class="rp-stat-val">{{ resultPanel.totalRequested ?? resultPanel.totalMapped ?? 0 }}</div>
+        </div>
+        <div class="rp-stat success">
+          <div class="rp-stat-label">&#10003; Success</div>
+          <div class="rp-stat-val">{{ resultPanel.successCount ?? 0 }}</div>
+        </div>
+        <div class="rp-stat failed">
+          <div class="rp-stat-label">&#10007; Failed</div>
+          <div class="rp-stat-val">{{ resultPanel.failedCount ?? 0 }}</div>
+        </div>
+      </div>
+      @if ((resultPanel.failedCount ?? 0) > 0 && resultPanel.failedProducts?.length) {
+        <div class="failed-list">
+          <h4>&#10007; Failed Products ({{ resultPanel.failedCount }})</h4>
+          @for (f of resultPanel.failedProducts!; track f.code) {
+            <div class="failed-item">
+              <div class="fi-code">{{ f.code }}</div>
+              <div class="fi-err">{{ errStr(f.error) }}</div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+}
+
+<!-- Toast Container -->
+<div class="toast-container">
+  @for (t of toasts; track t.id) {
+    <div class="toast" [class.success]="t.type === 'success'" [class.error]="t.type === 'error'" [class.info]="t.type === 'info'">
+      {{ t.message }}
+    </div>
+  }
+</div>

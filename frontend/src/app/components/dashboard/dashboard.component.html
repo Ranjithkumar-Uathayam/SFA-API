@@ -1,0 +1,18 @@
+<div class="hero">
+  <h1>&#128260; SFA Push Dashboard</h1>
+  <p>Manage and monitor Salesforce sync pushes for all master data modules.</p>
+</div>
+
+<div class="container">
+  <div class="section-title">Master Data Screens</div>
+  <div class="grid">
+    @for (card of cards; track card.title) {
+      <a [routerLink]="card.link" class="master-card">
+        <div class="mc-icon">{{ card.icon }}</div>
+        <div class="mc-title">{{ card.title }}</div>
+        <div class="mc-desc">{{ card.desc }}</div>
+        <div class="mc-badge">&#9679; Live</div>
+      </a>
+    }
+  </div>
+</div>

@@ -1,0 +1,170 @@
+<div class="loading-bar" [class.visible]="loading"></div>
+
+<div class="hero">
+  <h1>{{ cfg.icon }} {{ cfg.title }}</h1>
+  <p>{{ cfg.desc }}</p>
+</div>
+
+<!-- Summary Pills -->
+<div class="summary-bar">
+  <div class="pill pill-all" [class.active]="statusFilter === ''" (click)="filterByStatus('')">
+    <span class="dot"></span> All &nbsp;<span>{{ totalRecords.toLocaleString() }}</span>
+  </div>
+  <div class="pill pill-Pending" [class.active]="statusFilter === 'Pending'" (click)="filterByStatus('Pending')">
+    <span class="dot"></span> Pending &nbsp;<span>{{ (summary.Pending ?? 0).toLocaleString() }}</span>
+  </div>
+  <div class="pill pill-Pushing" [class.active]="statusFilter === 'Pushing'" (click)="filterByStatus('Pushing')">
+    <span class="dot"></span> In Progress &nbsp;<span>{{ (summary.Pushing ?? 0).toLocaleString() }}</span>
+  </div>
+  <div class="pill pill-Pushed" [class.active]="statusFilter === 'Pushed'" (click)="filterByStatus('Pushed')">
+    <span class="dot"></span> Pushed &nbsp;<span>{{ (summary.Pushed ?? 0).toLocaleString() }}</span>
+  </div>
+  <div class="pill pill-Failed" [class.active]="statusFilter === 'Failed'" (click)="filterByStatus('Failed')">
+    <span class="dot"></span> Failed &nbsp;<span>{{ (summary.Failed ?? 0).toLocaleString() }}</span>
+  </div>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <input type="text" [(ngModel)]="searchInput" (input)="onSearchInput()" placeholder="Search…" />
+  <select [(ngModel)]="pageLimit" (change)="onPageLimitChange()">
+    <option [ngValue]="25">25 / page</option>
+    <option [ngValue]="50">50 / page</option>
+    <option [ngValue]="100">100 / page</option>
+  </select>
+  <button class="btn btn-outline" (click)="loadPage(currentPage)">&#8635; Refresh</button>
+  <button class="btn btn-primary" [disabled]="loading" (click)="pushAll()">&#8679; Push All Matching</button>
+</div>
+
+<!-- Bulk bar -->
+@if (selectionCount > 0) {
+  <div class="bulk-bar">
+    <strong>{{ selectionCount }} selected</strong>
+    <button class="btn btn-primary" (click)="pushSelected()">&#8679; Push Selected</button>
+    <button class="btn btn-ghost" (click)="clearSelection()">Clear</button>
+  </div>
+}
+
+<!-- Table -->
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:36px">
+          <input type="checkbox" [checked]="isAllSelected()" (change)="toggleAll($any($event.target).checked)" />
+        </th>
+        @for (col of cfg.columns; track col.key) {
+          <th>{{ col.label }}</th>
+        }
+        <th>Push Status</th>
+        <th>Last Pushed</th>
+        <th>Last Error</th>
+        <th style="width:80px">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      @if (loading && records.length === 0) {
+        <tr><td [attr.colspan]="cfg.columns.length + 5">
+          <div class="empty-state"><div class="ei">{{ cfg.icon }}</div><div>Loading…</div></div>
+        </td></tr>
+      }
+      @if (!loading && records.length === 0) {
+        <tr><td [attr.colspan]="cfg.columns.length + 5">
+          <div class="empty-state"><div class="ei">{{ cfg.icon }}</div><div>No records found</div></div>
+        </td></tr>
+      }
+      @for (row of records; track getKey(row)) {
+        <tr [class.row-pushing]="isKeyPushing(getKey(row))"
+            [class.row-selected]="isKeySelected(getKey(row))">
+          <td>
+            <input type="checkbox"
+              [checked]="isKeySelected(getKey(row))"
+              [disabled]="isKeyPushing(getKey(row))"
+              (change)="toggleRow(getKey(row), $any($event.target).checked)" />
+          </td>
+          @for (col of cfg.columns; track col.key) {
+            <td [class]="col.cls || ''" [style.text-align]="col.align === 'right' ? 'right' : 'left'">
+              {{ getCellValue(row, col) }}
+            </td>
+          }
+          <td>
+            @if (isKeyPushing(getKey(row)) || row.PushStatus === 'Pushing') {
+              <span class="badge badge-Pushing"><span class="dot"></span>Pushing…</span>
+            } @else if (row.PushStatus === 'Pushed') {
+              <span class="badge badge-Pushed"><span class="dot"></span>Pushed</span>
+            } @else if (row.PushStatus === 'Failed') {
+              <span class="badge badge-Failed"><span class="dot"></span>Failed</span>
+            } @else {
+              <span class="badge badge-Pending"><span class="dot"></span>Pending</span>
+            }
+          </td>
+          <td style="white-space:nowrap;font-size:.78rem">
+            {{ row.LastPushedAt ? fmtDate(row.LastPushedAt) : '—' }}
+          </td>
+          <td>
+            @if (row.PushError) {
+              <span class="err-cell" [title]="row.PushError">{{ row.PushError }}</span>
+            } @else {
+              <span class="text-muted">—</span>
+            }
+          </td>
+          <td>
+            <button class="push-btn"
+              [disabled]="isKeyPushing(getKey(row))"
+              (click)="pushSingle(getKey(row))">
+              {{ isKeyPushing(getKey(row)) ? '…' : '↑ Push' }}
+            </button>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+<div class="pagination">
+  <span class="pg-info">{{ totalRecords.toLocaleString() }} records</span>
+  <button class="pg-btn" [disabled]="currentPage === 1" (click)="goToPage(currentPage - 1)">&#8249;</button>
+  @for (p of getPageNumbers(); track $index) {
+    @if (p === '…') {
+      <span class="pg-info">…</span>
+    } @else {
+      <button class="pg-btn" [class.active]="p === currentPage" (click)="goToPage(+p)">{{ p }}</button>
+    }
+  }
+  <button class="pg-btn" [disabled]="currentPage === totalPages" (click)="goToPage(currentPage + 1)">&#8250;</button>
+</div>
+
+<!-- Result panel -->
+@if (showResultPanel && resultPanel) {
+  <div class="result-panel open">
+    <div class="rp-header">
+      <div class="rp-title">Push Result</div>
+      <button class="rp-close" (click)="closeResultPanel()">&#10005;</button>
+    </div>
+    <div class="rp-stats">
+      <div class="rp-stat"><div class="val">{{ resultPanel.totalRequested ?? ((resultPanel.successCount ?? 0) + (resultPanel.failedCount ?? 0)) }}</div><div class="lbl">Requested</div></div>
+      <div class="rp-stat ok"><div class="val">{{ resultPanel.successCount ?? 0 }}</div><div class="lbl">Success</div></div>
+      <div class="rp-stat bad"><div class="val">{{ resultPanel.failedCount ?? 0 }}</div><div class="lbl">Failed</div></div>
+    </div>
+    @if (resultPanel.failedRecords?.length) {
+      <div class="failed-list">
+        @for (f of resultPanel.failedRecords!; track f.key) {
+          <div class="fi">
+            <span class="fk">{{ f.key }}</span>
+            <span class="fe">{{ errStr(f.error) }}</span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+}
+
+<!-- Toasts -->
+<div class="toast-container">
+  @for (t of toasts; track t.id) {
+    <div class="toast" [class.success]="t.type==='success'" [class.error]="t.type==='error'" [class.info]="t.type==='info'">
+      {{ t.message }}
+    </div>
+  }
+</div>

@@ -42,7 +42,7 @@ const masterController  = require('./src/controllers/masterController');
 const { startCronJobs } = require('./src/scheduler/cronJobs');
 
 const app = express();
-const PORT = process.env.PORT || 3100;
+const PORT = process.env.PORT || 4388;
 
 app.use(cors());
 app.use(express.json());

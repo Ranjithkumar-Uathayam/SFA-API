@@ -799,6 +799,62 @@ async function upsertOutstanding(payload) {
     };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ATTENDANCE — Fetch from dmpl__ResourceAvailabilityData__c
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch attendance records from Salesforce for a given punch type.
+ * Handles SOQL pagination (nextRecordsUrl) automatically.
+ * @param {'Check-In'|'Check-Out'} punchType
+ * @returns {Promise<Array>}
+ */
+async function fetchAttendanceRecords(punchType) {
+    const token = await getSalesforceToken();
+    const base  = instanceUrl;
+
+    if (!base) throw new Error('Salesforce instanceUrl is not available after token fetch.');
+
+    const soql = [
+        'SELECT Id, dmpl__ResourceId__r.EmployeeId__c, AttendenceTime__c, dmpl__Type__c',
+        'FROM dmpl__ResourceAvailabilityData__c',
+        `WHERE CreatedDate = TODAY AND dmpl__Type__c = '${punchType}'`
+    ].join(' ');
+
+    const queryUrl = `${base}/services/data/v60.0/query`;
+    const headers  = { Authorization: `Bearer ${token}` };
+    const records  = [];
+
+    log.info(`Fetching SF attendance — punchType: ${punchType}`);
+
+    try {
+        let url    = queryUrl;
+        let params = { q: soql };
+
+        while (url) {
+            const res  = url === queryUrl
+                ? await axios.get(url, { params, headers, timeout: REQ_TIMEOUT })
+                : await axios.get(`${base}${url}`, { headers, timeout: REQ_TIMEOUT });
+
+            const page = res.data;
+            records.push(...(page.records || []));
+            log.info(`  Page fetched — ${page.records?.length ?? 0} record(s), total so far: ${records.length}`);
+
+            url    = page.done ? null : page.nextRecordsUrl;
+            params = undefined;
+        }
+
+        log.ok(`SF attendance fetch complete — ${records.length} ${punchType} record(s)`);
+        return records;
+
+    } catch (err) {
+        log.error(`SF Attendance Fetch FAILED for ${punchType}`);
+        log.error(`  Status : ${err.response?.status}`);
+        log.error(`  Body   : ${JSON.stringify(err.response?.data ?? err.message)}`);
+        throw new Error(`SF Attendance Fetch Failed [${punchType}]: ${err.response?.data?.[0]?.message ?? err.message}`);
+    }
+}
+
 module.exports = {
     upsertProducts,
     upsertPriceLists,
@@ -806,5 +862,6 @@ module.exports = {
     upsertSchemes,
     upsertBusinessPartners,
     upsertStockInventory,
-    upsertOutstanding
+    upsertOutstanding,
+    fetchAttendanceRecords
 };

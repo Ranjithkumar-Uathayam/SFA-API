@@ -1702,6 +1702,43 @@ async function getOutstandingDataByCodes(cardCodes) {
     return result.recordset;
 }
 
+/**
+ * Insert a single punch log record.
+ * Returns { skipped: true } if RefId already exists, otherwise { inserted: true }.
+ */
+async function insertPunchLog({ RefId, EmployeeId, PunchType, PunchTime }) {
+    const pool = await getPool();
+
+    const existsResult = await pool.request()
+        .input('RefIdChk', sql.VarChar(sql.MAX), RefId)
+        .query(`SELECT 1 AS found FROM [BBLive].[dbo].ehr_punch_log WHERE RefId = @RefIdChk`);
+
+    if (existsResult.recordset.length > 0) {
+        return { skipped: true };
+    }
+
+    await pool.request()
+        .input('RefId',           sql.VarChar(sql.MAX), RefId)
+        .input('EmployeeId',      sql.VarChar(20),       EmployeeId)
+        .input('PunchType',       sql.Char(1),           PunchType)
+        .input('PunchTime',       sql.DateTime2(7),      new Date(PunchTime))
+        .input('CaptureDateTime', sql.DateTime2(7),      new Date())
+        .query(`
+            INSERT INTO [BBLive].[dbo].ehr_punch_log (RefId, EmployeeId, PunchType, PunchTime, CaptureDateTime, PushStatus)
+            VALUES (@RefId, @EmployeeId, @PunchType, @PunchTime, @CaptureDateTime, 'Pending')
+        `);
+
+    return { inserted: true };
+}
+
+async function updatePunchLogStatus(RefId, status) {
+    const pool = await getPool();
+    await pool.request()
+        .input('RefId',  sql.VarChar(sql.MAX), RefId)
+        .input('Status', sql.VarChar(20),       status)
+        .query(`UPDATE [BBLive].[dbo].ehr_punch_log SET PushStatus = @Status WHERE RefId = @RefId`);
+}
+
 module.exports = {
     getProductData,
     getProductsPaged,
@@ -1722,4 +1759,6 @@ module.exports = {
     getOutstandingData,
     getOutstandingPaged,
     getOutstandingDataByCodes,
+    insertPunchLog,
+    updatePunchLogStatus,
 };

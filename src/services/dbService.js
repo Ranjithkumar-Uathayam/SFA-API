@@ -404,7 +404,7 @@ async function getBPMasterData() {
                 ------------------------------------------------------------------
                 (
                     SELECT
-                        (ISNULL(T0.DocEntry,1) + T1.LineNum) AS BillShipID,
+                        CAST(ISNULL(T0.DocEntry,1) AS VARCHAR) + CAST(T1.LineNum AS VARCHAR) AS BillShipID,
                         T1.AdresType AS Type,
                         T0.CardName AS DisplayName,
                         CASE WHEN T1.AdresType = 'B' THEN 'OFFICE' ELSE 'SHIP' END AS LocationName,

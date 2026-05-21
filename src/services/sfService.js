@@ -537,6 +537,7 @@ async function upsertBusinessPartners(payload) {
         const body = { businessPartners: [bp] };
 
         try {
+            console.log("payload****", JSON.stringify(body))
             const response = await withRetry(
                 () => axios.post(url, body, { headers, timeout: REQ_TIMEOUT }),
                 code

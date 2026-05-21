@@ -255,7 +255,7 @@ exports.syncSchemes = async (req, res) => {
                 `BP: ${s.Policy.SC_BpInclution[0]?.BPCode ?? 'n/a'}`
             )
         );
-        console.log("getSchemeData", JSON.stringify(payload))
+
         const sfResult = await sfService.upsertSchemes(payload);
 
         divider('SCHEME SYNC COMPLETE');
@@ -330,7 +330,7 @@ exports.syncBusinessPartners = async (req, res) => {
                 `SubBrands: ${bp.MST_Map_BP_SubBrand.length}`
             )
         );
-        console.log("payload****", JSON.stringify(payload))
+        
         const sfResult = await sfService.upsertBusinessPartners(payload);
 
         divider('BP SYNC COMPLETE');

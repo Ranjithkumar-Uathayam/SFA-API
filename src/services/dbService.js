@@ -1702,6 +1702,36 @@ async function getOutstandingDataByCodes(cardCodes) {
     return result.recordset;
 }
 
+async function upsertPunchLog(rows) {
+    const pool = await getPool();
+    let inserted = 0, skipped = 0, failed = 0;
+
+    for (const row of rows) {
+        try {
+            const result = await pool.request()
+                .input('RefId',      sql.VarChar(sql.MAX), row.RefId)
+                .input('EmployeeId', sql.VarChar(20),      row.EmployeeId)
+                .input('PunchType',  sql.Char(1),          row.PunchType)
+                .input('PunchTime',  sql.DateTime2,        new Date(row.PunchTime))
+                .query(`
+                    IF NOT EXISTS (SELECT 1 FROM dbo.ehr_punch_log WHERE RefId = @RefId)
+                    BEGIN
+                        INSERT INTO BBLive.dbo.ehr_punch_log
+                            (RefId, EmployeeId, PunchType, PunchTime, CaptureDateTime, PushStatus)
+                        VALUES
+                            (@RefId, @EmployeeId, @PunchType, @PunchTime, GETDATE(), 'Pushed')
+                    END
+                `);
+            if (result.rowsAffected[0] > 0) inserted++;
+            else skipped++;
+        } catch (err) {
+            console.error(`[ATTENDANCE] ❌ Insert failed for RefId=${row.RefId}: ${err.message}`);
+            failed++;
+        }
+    }
+    return { inserted, skipped, failed };
+}
+
 module.exports = {
     getProductData,
     getProductsPaged,
@@ -1722,4 +1752,5 @@ module.exports = {
     getOutstandingData,
     getOutstandingPaged,
     getOutstandingDataByCodes,
+    upsertPunchLog,
 };

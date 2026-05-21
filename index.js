@@ -35,11 +35,12 @@ require('dotenv').config({
         ? path.join(path.dirname(process.execPath), '.env')
         : path.join(__dirname, '.env')
 });
-const syncController = require('./src/controllers/syncController');
-const pushController    = require('./src/controllers/pushController');
-const productController = require('./src/controllers/productController');
-const masterController  = require('./src/controllers/masterController');
-const { startCronJobs } = require('./src/scheduler/cronJobs');
+const syncController        = require('./src/controllers/syncController');
+const pushController        = require('./src/controllers/pushController');
+const productController     = require('./src/controllers/productController');
+const masterController      = require('./src/controllers/masterController');
+const attendanceController  = require('./src/controllers/attendanceController');
+const { startCronJobs }     = require('./src/scheduler/cronJobs');
 
 const app = express();
 const PORT = process.env.PORT || 4388;
@@ -88,6 +89,10 @@ app.get ('/api/master/:masterType/list',     masterController.getMasterList);
 app.post('/api/master/:masterType/push',     masterController.pushMasterRecords);
 app.post('/api/master/:masterType/push-all', masterController.pushAllMasterRecords);
 
+// ── Attendance sync routes ─────────────────────────────────────────────────
+app.post('/api/attendance/sync-checkin',  attendanceController.syncCheckIn);
+app.post('/api/attendance/sync-checkout', attendanceController.syncCheckOut);
+
 // Health check (JSON for API consumers)
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', service: 'SFA API', port: PORT });
@@ -112,6 +117,8 @@ app.listen(PORT, () => {
     console.log(` - POST /api/sync/businesspartners`);
     console.log(` - POST /api/sync/stockInventory`);
     console.log(` - POST /api/sync/outstanding`);
+    console.log(` - POST /api/attendance/sync-checkin`);
+    console.log(` - POST /api/attendance/sync-checkout`);
 
     startCronJobs();
 });

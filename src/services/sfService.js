@@ -799,7 +799,13 @@ async function upsertOutstanding(payload) {
     };
 }
 
+async function getAuthData() {
+    const token = await getSalesforceToken();
+    return { token, instanceUrl };
+}
+
 module.exports = {
+    getAuthData,
     upsertProducts,
     upsertPriceLists,
     uploadImages,

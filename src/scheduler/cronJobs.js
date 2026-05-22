@@ -216,18 +216,24 @@ async function runEhrPushSync(punchTypeCode) {
             return;
         }
 
-        const ids    = records.map(r => r.Id);
-        const result = await ehrService.pushAttendanceToEhr(records);
+        const { results } = await ehrService.pushAttendanceToEhr(records);
 
-        if (result.success) {
-            await dbService.updatePunchLogStatusByIds(ids, 'Pushed');
-            log.ok(`EHR ${label} Push COMPLETE — ${ids.length} record(s) marked Pushed | elapsed: ${elapsed(startTime)}`);
-        } else {
-            await dbService.updatePunchLogStatusByIds(ids, 'Failed');
-            log.error(`EHR ${label} Push FAILED — ${ids.length} record(s) marked Failed | elapsed: ${elapsed(startTime)}`);
-            log.error(`  HTTP : ${result.status ?? 'N/A'}`);
-            log.error(`  Error: ${JSON.stringify(result.error)}`);
+        const succeededIds = [];
+        const failedIds    = [];
+        for (let i = 0; i < results.length; i++) {
+            const r = results[i];
+            if (r.success) {
+                succeededIds.push(records[i].Id);
+            } else {
+                failedIds.push(records[i].Id);
+                log.error(`  Record ${records[i].Id} FAILED — HTTP ${r.status ?? 'N/A'} | ${JSON.stringify(r.error)}`);
+            }
         }
+
+        if (succeededIds.length) await dbService.updatePunchLogStatusByIds(succeededIds, 'Pushed');
+        if (failedIds.length)    await dbService.updatePunchLogStatusByIds(failedIds,    'Failed');
+
+        log.ok(`EHR ${label} Push COMPLETE — ${succeededIds.length} Pushed, ${failedIds.length} Failed | elapsed: ${elapsed(startTime)}`);
 
     } catch (err) {
         log.error(`EHR ${label} Push unhandled error after ${elapsed(startTime)}: ${err.message}`);
@@ -249,7 +255,7 @@ function startCronJobs() {
     //     log.info('Cron triggered: Outstanding Sync (every 45 minutes)');
     //     runOutstandingSync();
     // });
-    
+
     // Attendance Check-In sync (SF → DB) — daily at 11:00 AM
     cron.schedule('0 11 * * *', () => {
         log.info('Cron triggered: Attendance Check-In Sync (11:00 AM)');

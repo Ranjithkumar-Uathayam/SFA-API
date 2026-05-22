@@ -66,7 +66,7 @@ async function getEhrToken() {
         );
 
         // API returns the JWT token as a plain string in the response body
-        const token = res
+        const token = res.data
         if (!token) {
             throw new Error(`Unexpected auth response format: ${JSON.stringify(res.data)}`);
         }
@@ -90,38 +90,26 @@ async function getEhrToken() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Push attendance records to the EHR Attendance API.
- *
- * @param {Array<{EmployeeId, PunchType, PunchTime, CaptureDateTime}>} records
- * @returns {{ success: boolean, status: number|undefined, data: any, error: any }}
+ * Push a single attendance record to the EHR Attendance API.
+ * Retries on 5xx; stops immediately on 4xx.
  */
-async function pushAttendanceToEhr(records) {
-    if (!records || records.length === 0) {
-        log.warn('pushAttendanceToEhr called with 0 records — nothing to push.');
-        return { success: true, status: null, data: null, error: null };
-    }
+async function pushSingleRecord(token, record) {
+    const url        = EHR_BASE_URL();
+    const maxRetries = EHR_MAX_RETRIES();
+    const retryDelay = EHR_RETRY_DELAY();
 
-    const url   = EHR_BASE_URL();
-    if (!url) throw new Error('EHR_BASE_URL is not set in .env');
+    const payload = {
+        EmployeeId     : record.EmployeeId,
+        PunchType      : record.PunchType,
+        PunchTime      : formatDatetime2(record.PunchTime),
+        CaptureDateTime: formatDatetime2(record.CaptureDateTime),
+    };
 
-    const token = await getEhrToken();
+    log.info(`  Sending: ${JSON.stringify(payload)}`);
 
-    const payload = records.map(r => ({
-        EmployeeId     : r.EmployeeId,
-        PunchType      : r.PunchType,
-        PunchTime      : formatDatetime2(r.PunchTime),
-        CaptureDateTime: formatDatetime2(r.CaptureDateTime),
-    }));
-
-    log.info(`Pushing ${payload.length} record(s) to EHR Attendance API — ${url}`);
-
-    const maxRetries  = EHR_MAX_RETRIES();
-    const retryDelay  = EHR_RETRY_DELAY();
-    let   lastErr     = null;
-
+    let lastErr = null;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            console.log("*********url", JSON.stringify(payload) )
             const res = await axios.post(url, payload, {
                 headers: {
                     Authorization : `Bearer ${token}`,
@@ -130,8 +118,7 @@ async function pushAttendanceToEhr(records) {
                 timeout: EHR_TIMEOUT(),
             });
 
-            log.ok(`EHR push SUCCESS — HTTP ${res.status} | attempt ${attempt}/${maxRetries}`);
-            log.info(`  Response: ${JSON.stringify(res.data)}`);
+            log.ok(`  SUCCESS — HTTP ${res.status} | attempt ${attempt}/${maxRetries} | Response: ${JSON.stringify(res.data)}`);
             return { success: true, status: res.status, data: res.data, error: null };
 
         } catch (err) {
@@ -139,11 +126,8 @@ async function pushAttendanceToEhr(records) {
             const status = err.response?.status;
             const body   = JSON.stringify(err.response?.data ?? err.message);
 
-            log.error(`EHR push FAILED — attempt ${attempt}/${maxRetries}`);
-            log.error(`  HTTP Status : ${status ?? 'N/A'}`);
-            log.error(`  Response    : ${body}`);
+            log.error(`  FAILED — attempt ${attempt}/${maxRetries} | HTTP ${status ?? 'N/A'} | ${body}`);
 
-            // Do not retry on client-side errors (4xx) — they won't self-heal
             if (status && status >= 400 && status < 500) {
                 log.warn(`  4xx error — not retrying.`);
                 break;
@@ -156,9 +140,44 @@ async function pushAttendanceToEhr(records) {
         }
     }
 
-    const status = lastErr?.response?.status;
-    const error  = lastErr?.response?.data ?? lastErr?.message;
-    return { success: false, status, data: null, error };
+    return {
+        success: false,
+        status : lastErr?.response?.status,
+        data   : null,
+        error  : lastErr?.response?.data ?? lastErr?.message,
+    };
+}
+
+/**
+ * Push attendance records to the EHR Attendance API — one request per record.
+ *
+ * @param {Array<{EmployeeId, PunchType, PunchTime, CaptureDateTime}>} records
+ * @returns {{ results: Array<{ record, success, status, data, error }> }}
+ */
+async function pushAttendanceToEhr(records) {
+    if (!records || records.length === 0) {
+        log.warn('pushAttendanceToEhr called with 0 records — nothing to push.');
+        return { results: [] };
+    }
+
+    const url = EHR_BASE_URL();
+    if (!url) throw new Error('EHR_BASE_URL is not set in .env');
+
+    const token = await getEhrToken();
+
+    log.info(`Pushing ${records.length} record(s) individually to EHR Attendance API — ${url}`);
+
+    const results = [];
+    for (const record of records) {
+        const result = await pushSingleRecord(token, record);
+        results.push({ record, ...result });
+    }
+
+    const succeeded = results.filter(r => r.success).length;
+    const failed    = results.length - succeeded;
+    log.info(`EHR push complete — ${succeeded} succeeded, ${failed} failed out of ${results.length} total.`);
+
+    return { results };
 }
 
 module.exports = { pushAttendanceToEhr };

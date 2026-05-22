@@ -26,25 +26,6 @@ const log = {
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Format a Date object or ISO string to the EHR datetime format:
- * "YYYY-MM-DDTHH:MM:SS"
- */
-function formatDatetime2(value) {
-    if (!value) return null;
-    const d   = new Date(value);
-    if (isNaN(d.getTime())) return String(value);
-    const pad = (n, w = 2) => String(n).padStart(w, '0');
-    return (
-        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T` +
-        `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-    );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // AUTHENTICATION
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -101,8 +82,8 @@ async function pushSingleRecord(token, record) {
     const payload = {
         EmployeeId     : record.EmployeeId,
         PunchType      : record.PunchType,
-        PunchTime      : formatDatetime2(record.PunchTime),
-        CaptureDateTime: formatDatetime2(record.CaptureDateTime),
+        PunchTime      : record.PunchTime,
+        CaptureDateTime: record.CaptureDateTime,
     };
 
     log.info(`  Sending: ${JSON.stringify(payload)}`);

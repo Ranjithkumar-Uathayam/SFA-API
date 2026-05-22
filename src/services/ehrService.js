@@ -69,7 +69,13 @@ async function getEhrToken() {
 // ─────────────────────────────────────────────────────────────────────────────
 // PUSH
 // ─────────────────────────────────────────────────────────────────────────────
+function formatDateTime(value) {
+    if (!value) return null;
 
+    return new Date(value)
+        .toISOString()
+        .slice(0, 19);
+}
 /**
  * Push a single attendance record to the EHR Attendance API.
  * Retries on 5xx; stops immediately on 4xx.
@@ -78,12 +84,13 @@ async function pushSingleRecord(token, record) {
     const url        = EHR_BASE_URL();
     const maxRetries = EHR_MAX_RETRIES();
     const retryDelay = EHR_RETRY_DELAY();
-
+    console.log("record.PunchTime", record.PunchTime)
+    console.log("record.CaptureDateTime", record.CaptureDateTime)
     const payload = {
         EmployeeId     : record.EmployeeId,
         PunchType      : record.PunchType,
-        PunchTime      : record.PunchTime,
-        CaptureDateTime: record.CaptureDateTime,
+        PunchTime      : formatDateTime(record.PunchTime),
+        CaptureDateTime: formatDateTime(record.CaptureDateTime),
     };
 
     log.info(`  Sending: ${JSON.stringify(payload)}`);

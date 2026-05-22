@@ -1726,16 +1726,24 @@ async function ensureEhrPunchLogTable() {
 
 /**
  * Insert a single punch log record.
- * Returns { skipped: true } if RefId already exists, otherwise { inserted: true }.
+ * Returns { skipped: true } if a record already exists for the same date, EmployeeId, and PunchType,
+ * otherwise { inserted: true }.
  */
 async function insertPunchLog({ RefId, EmployeeId, PunchType, PunchTime }) {
     const pool = await getPool();
 
-    const existsResult = await pool.request()
-        .input('RefIdChk', sql.VarChar(sql.MAX), RefId)
-        .query(`SELECT 1 AS found FROM [BBLive].[dbo].[ehr_punch_log] WHERE RefId = @RefIdChk`);
+    const dupResult = await pool.request()
+        .input('EmployeeIdChk', sql.VarChar(20),      EmployeeId)
+        .input('PunchTypeChk',  sql.Char(1),           PunchType)
+        .input('PunchTimeChk',  sql.DateTime2(7),      new Date(PunchTime))
+        .query(`
+            SELECT 1 AS found FROM [BBLive].[dbo].[ehr_punch_log]
+            WHERE EmployeeId = @EmployeeIdChk
+              AND PunchType  = @PunchTypeChk
+              AND CAST(PunchTime AS DATE) = CAST(@PunchTimeChk AS DATE)
+        `);
 
-    if (existsResult.recordset.length > 0) {
+    if (dupResult.recordset.length > 0) {
         return { skipped: true };
     }
 
@@ -1772,6 +1780,7 @@ async function getPendingPunchLogs(punchType) {
             SELECT Id, RefId, EmployeeId, PunchType, PunchTime, CaptureDateTime
             FROM [BBLive].[dbo].[ehr_punch_log]
             WHERE PunchType = @PunchType AND (PushStatus = 'Pending' OR PushStatus = 'Failed')
+           
             ORDER BY PunchTime ASC
         `);
     return result.recordset;

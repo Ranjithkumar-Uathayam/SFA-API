@@ -30,8 +30,8 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Format a Date object or ISO string to the EHR datetime2 string format:
- * "YYYY-MM-DD HH:MM:SS.0000000"
+ * Format a Date object or ISO string to the EHR datetime format:
+ * "YYYY-MM-DDTHH:MM:SS"
  */
 function formatDatetime2(value) {
     if (!value) return null;
@@ -39,8 +39,8 @@ function formatDatetime2(value) {
     if (isNaN(d.getTime())) return String(value);
     const pad = (n, w = 2) => String(n).padStart(w, '0');
     return (
-        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
-        `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.0000000`
+        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T` +
+        `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
     );
 }
 
@@ -65,10 +65,10 @@ async function getEhrToken() {
             { headers: { 'Content-Type': 'application/json' }, timeout: EHR_TIMEOUT() }
         );
 
-        // Accommodate common token field names across EHR API versions
+        // API returns the JWT token as a plain string in the response body
         const token = res
         if (!token) {
-            throw new Error(`Token field not found in auth response: ${JSON.stringify(res.data)}`);
+            throw new Error(`Unexpected auth response format: ${JSON.stringify(res.data)}`);
         }
 
         log.ok('EHR token acquired successfully.');
@@ -121,6 +121,7 @@ async function pushAttendanceToEhr(records) {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
+            console.log("*********url", JSON.stringify(payload) )
             const res = await axios.post(url, payload, {
                 headers: {
                     Authorization : `Bearer ${token}`,

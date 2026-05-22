@@ -249,14 +249,13 @@ function startCronJobs() {
     //     log.info('Cron triggered: Outstanding Sync (every 45 minutes)');
     //     runOutstandingSync();
     // });
-
+    
     // Attendance Check-In sync (SF → DB) — daily at 11:00 AM
     cron.schedule('0 11 * * *', () => {
         log.info('Cron triggered: Attendance Check-In Sync (11:00 AM)');
         runAttendanceSync('Check-In', 'I');
     });
     
-    runEhrPushSync('O')
     // EHR Check-In push (DB → EHR API) — daily at 11:10 AM
     cron.schedule('10 11 * * *', () => {
         log.info('Cron triggered: EHR Check-In Push (11:10 AM)');

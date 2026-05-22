@@ -128,8 +128,6 @@ async function runAttendanceSync(punchTypeLabel, punchTypeCode) {
     log.info(`──────────── ATTENDANCE ${punchTypeLabel.toUpperCase()} SYNC START ────────────`);
 
     try {
-        await dbService.ensureEhrPunchLogTable();
-
         log.info(`Fetching ${punchTypeLabel} records from Salesforce…`);
         const sfRecords = await sfService.fetchAttendanceRecords(punchTypeLabel);
         log.info(`Fetched ${sfRecords.length} ${punchTypeLabel} record(s)`);

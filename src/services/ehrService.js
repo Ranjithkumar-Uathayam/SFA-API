@@ -84,8 +84,7 @@ async function pushSingleRecord(token, record) {
     const url        = EHR_BASE_URL();
     const maxRetries = EHR_MAX_RETRIES();
     const retryDelay = EHR_RETRY_DELAY();
-    console.log("record.PunchTime", record.PunchTime)
-    console.log("record.CaptureDateTime", record.CaptureDateTime)
+    
     const payload = {
         EmployeeId     : record.EmployeeId,
         PunchType      : record.PunchType,

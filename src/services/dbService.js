@@ -1702,28 +1702,6 @@ async function getOutstandingDataByCodes(cardCodes) {
     return result.recordset;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// EHR PUNCH LOG
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function ensureEhrPunchLogTable() {
-    const pool = await getPool();
-    await pool.request().query(`
-        IF OBJECT_ID('[BBLive].[dbo].[ehr_punch_log]', 'U') IS NULL
-        CREATE TABLE [BBLive].[dbo].[ehr_punch_log] (
-            Id              BIGINT IDENTITY(1,1) PRIMARY KEY,
-            RefId           VARCHAR(MAX)  NOT NULL,
-            EmployeeId      VARCHAR(20)   NOT NULL,
-            PunchType       CHAR(1)       NOT NULL,
-            PunchTime       DATETIME2(7)  NOT NULL,
-            CaptureDateTime DATETIME2(7)  NOT NULL,
-            PushStatus      VARCHAR(20)   NOT NULL DEFAULT 'Pending',
-            CONSTRAINT chk_punch_type CHECK (PunchType IN ('I', 'O')),
-            CONSTRAINT chk_status     CHECK (PushStatus IN ('Pending', 'Pushed', 'Failed'))
-        )
-    `);
-}
-
 /**
  * Insert a single punch log record.
  * Returns { skipped: true } if a record already exists for the same date, EmployeeId, and PunchType,
@@ -1752,7 +1730,7 @@ async function insertPunchLog({ RefId, EmployeeId, PunchType, PunchTime }) {
         .input('EmployeeId',      sql.VarChar(20),       EmployeeId)
         .input('PunchType',       sql.Char(1),           PunchType)
         .input('PunchTime',       sql.DateTime2(7),      new Date(PunchTime))
-        .input('CaptureDateTime', sql.DateTime2(7),      new Date())
+        .input('CaptureDateTime', sql.DateTime2(7),      GETDATE())
         .query(`
             INSERT INTO [BBLive].[dbo].[ehr_punch_log]
                 (RefId, EmployeeId, PunchType, PunchTime, CaptureDateTime, PushStatus)
@@ -1780,7 +1758,7 @@ async function getPendingPunchLogs(punchType) {
             SELECT Id, RefId, EmployeeId, PunchType, PunchTime, CaptureDateTime
             FROM [BBLive].[dbo].[ehr_punch_log]
             WHERE PunchType = @PunchType AND (PushStatus = 'Pending' OR PushStatus = 'Failed')
-           
+            AND ID = 200
             ORDER BY PunchTime ASC
         `);
     return result.recordset;
@@ -1821,7 +1799,6 @@ module.exports = {
     getOutstandingData,
     getOutstandingPaged,
     getOutstandingDataByCodes,
-    ensureEhrPunchLogTable,
     insertPunchLog,
     updatePunchLogStatus,
     getPendingPunchLogs,

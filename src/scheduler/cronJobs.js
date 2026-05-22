@@ -1,6 +1,7 @@
 const cron       = require('node-cron');
 const dbService  = require('../services/dbService');
 const sfService  = require('../services/sfService');
+const ehrService = require('../services/ehrService');
 const mapper     = require('../utils/dataMapper');
 
 function ts()       { return new Date().toISOString().replace('T', ' ').slice(0, 23); }
@@ -18,6 +19,8 @@ let stockSyncRunning       = false;
 let outstandingSyncRunning = false;
 let checkInRunning         = false;
 let checkOutRunning        = false;
+let ehrCheckInRunning      = false;
+let ehrCheckOutRunning     = false;
 
 async function runStockInventorySync() {
     if (stockSyncRunning) {
@@ -125,6 +128,8 @@ async function runAttendanceSync(punchTypeLabel, punchTypeCode) {
     log.info(`──────────── ATTENDANCE ${punchTypeLabel.toUpperCase()} SYNC START ────────────`);
 
     try {
+        await dbService.ensureEhrPunchLogTable();
+
         log.info(`Fetching ${punchTypeLabel} records from Salesforce…`);
         const sfRecords = await sfService.fetchAttendanceRecords(punchTypeLabel);
         log.info(`Fetched ${sfRecords.length} ${punchTypeLabel} record(s)`);
@@ -157,10 +162,9 @@ async function runAttendanceSync(punchTypeLabel, punchTypeCode) {
                     log.info(`  Duplicate skipped — RefId: ${RefId}`);
                     skipped++;
                 } 
-                else 
+                else
                 {
-                    await dbService.updatePunchLogStatus(RefId, 'Pending');
-                    log.info(`  Inserted & Pushed — RefId: ${RefId} | Employee: ${EmployeeId}`);
+                    log.info(`  Inserted (Pending) — RefId: ${RefId} | Employee: ${EmployeeId}`);
                     inserted++;
                 }
             } catch (err) {
@@ -172,7 +176,7 @@ async function runAttendanceSync(punchTypeLabel, punchTypeCode) {
         }
 
         log.ok(`Attendance ${punchTypeLabel} Sync COMPLETE — elapsed: ${elapsed(startTime)}`);
-        log.info(`  Inserted (Pushed) : ${inserted}`);
+        log.info(`  Inserted (Pending): ${inserted}`);
         log.info(`  Skipped (dup/null): ${skipped}`);
         if (failed > 0) log.error(`  Failed            : ${failed}`);
 
@@ -181,6 +185,55 @@ async function runAttendanceSync(punchTypeLabel, punchTypeCode) {
     } finally {
         setGuard(false);
         log.info(`──────────── ATTENDANCE ${punchTypeLabel.toUpperCase()} SYNC END ────────────`);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EHR PUSH — Push Pending punch logs to the E-HR Attendance API
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function runEhrPushSync(punchTypeCode) {
+    const label     = punchTypeCode === 'I' ? 'Check-In' : 'Check-Out';
+    const isCheckIn = punchTypeCode === 'I';
+    const getGuard  = () => isCheckIn ? ehrCheckInRunning  : ehrCheckOutRunning;
+    const setGuard  = (v) => { if (isCheckIn) ehrCheckInRunning = v; else ehrCheckOutRunning = v; };
+
+    if (getGuard()) {
+        log.warn(`EHR ${label} push already in progress — skipping this tick.`);
+        return;
+    }
+    setGuard(true);
+    const startTime = Date.now();
+    log.info(`──────────── EHR ${label.toUpperCase()} PUSH START ────────────`);
+
+    try {
+        log.info(`Fetching Pending ${label} records from ehr_punch_log…`);
+        const records = await dbService.getPendingPunchLogs(punchTypeCode);
+        log.info(`Found ${records.length} Pending ${label} record(s)`);
+
+        if (!records.length) {
+            log.warn(`No Pending ${label} records — nothing to push.`);
+            return;
+        }
+
+        const ids    = records.map(r => r.Id);
+        const result = await ehrService.pushAttendanceToEhr(records);
+
+        if (result.success) {
+            await dbService.updatePunchLogStatusByIds(ids, 'Pushed');
+            log.ok(`EHR ${label} Push COMPLETE — ${ids.length} record(s) marked Pushed | elapsed: ${elapsed(startTime)}`);
+        } else {
+            await dbService.updatePunchLogStatusByIds(ids, 'Failed');
+            log.error(`EHR ${label} Push FAILED — ${ids.length} record(s) marked Failed | elapsed: ${elapsed(startTime)}`);
+            log.error(`  HTTP : ${result.status ?? 'N/A'}`);
+            log.error(`  Error: ${JSON.stringify(result.error)}`);
+        }
+
+    } catch (err) {
+        log.error(`EHR ${label} Push unhandled error after ${elapsed(startTime)}: ${err.message}`);
+    } finally {
+        setGuard(false);
+        log.info(`──────────── EHR ${label.toUpperCase()} PUSH END ────────────`);
     }
 }
 
@@ -196,18 +249,31 @@ function startCronJobs() {
     //     log.info('Cron triggered: Outstanding Sync (every 45 minutes)');
     //     runOutstandingSync();
     // });
- 
-    // Attendance Check-In sync — daily at 11:00 AM
+
+    // Attendance Check-In sync (SF → DB) — daily at 11:00 AM
     cron.schedule('0 11 * * *', () => {
         log.info('Cron triggered: Attendance Check-In Sync (11:00 AM)');
         runAttendanceSync('Check-In', 'I');
     });
+    
+    runEhrPushSync('O')
+    // EHR Check-In push (DB → EHR API) — daily at 11:10 AM
+    cron.schedule('10 11 * * *', () => {
+        log.info('Cron triggered: EHR Check-In Push (11:10 AM)');
+        runEhrPushSync('I');
+    });
 
-    // Attendance Check-Out sync — daily at 11:30 PM
+    // Attendance Check-Out sync (SF → DB) — daily at 11:30 PM
     cron.schedule('30 23 * * *', () => {
         log.info('Cron triggered: Attendance Check-Out Sync (11:30 PM)');
         runAttendanceSync('Check-Out', 'O');
     });
+
+    // EHR Check-Out push (DB → EHR API) — daily at 11:40 PM
+    cron.schedule('40 23 * * *', () => {
+        log.info('Cron triggered: EHR Check-Out Push (11:40 PM)');
+        runEhrPushSync('O');
+    });
 }
 
-module.exports = { startCronJobs, runAttendanceSync };
+module.exports = { startCronJobs, runAttendanceSync, runEhrPushSync };

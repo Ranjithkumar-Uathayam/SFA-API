@@ -167,7 +167,6 @@ async function runAttendanceSync(punchTypeLabel, punchTypeCode) {
                 }
             } catch (err) {
                 log.error(`  Insert FAILED — RefId: ${RefId} | ${err.message}`);
-                console.log("*************err",err)
                 // Attempt to mark the row as Failed if it was partially written
                 try { await dbService.updatePunchLogStatus(RefId, 'Failed'); } catch (_) {}
                 failed++;
@@ -259,8 +258,8 @@ function startCronJobs() {
     //     log.info('Cron triggered: Outstanding Sync (every 45 minutes)');
     //     runOutstandingSync();
     // });
-
-    // Attendance Check-In sync (SF → DB) — daily at 11:00 AM
+    
+    //Attendance Check-In sync (SF → DB) — daily at 11:00 AM
     cron.schedule('0 11 * * *', () => {
         log.info('Cron triggered: Attendance Check-In Sync (11:00 AM)');
         runAttendanceSync('Check-In', 'I');

@@ -818,7 +818,7 @@ async function fetchAttendanceRecords(punchType) {
     const soql = [
         'SELECT Id, dmpl__ResourceId__r.EmployeeId__c, AttendenceTime__c, dmpl__Type__c',
         'FROM dmpl__ResourceAvailabilityData__c',
-        `WHERE CreatedDate = LAST_N_DAYS:26 AND dmpl__Type__c = '${punchType}'`
+        `WHERE CreatedDate = TODAY AND dmpl__Type__c = '${punchType}'`
     ].join(' ');
 
     const queryUrl = `${base}/services/data/v60.0/query`;

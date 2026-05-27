@@ -167,6 +167,7 @@ async function runAttendanceSync(punchTypeLabel, punchTypeCode) {
                 }
             } catch (err) {
                 log.error(`  Insert FAILED — RefId: ${RefId} | ${err.message}`);
+                console.log("*************err",err)
                 // Attempt to mark the row as Failed if it was partially written
                 try { await dbService.updatePunchLogStatus(RefId, 'Failed'); } catch (_) {}
                 failed++;

@@ -621,6 +621,7 @@ async function getBPMasterData() {
             WHERE T0.CardType = 'C'
             AND T0.validFor = 'Y'
             AND T0.U_AreaCode != ''
+            AND T0.Cardcode = 'C026504'
             ORDER BY T0.CardCode, SB.DivisionCode, SB.SubBrandName`
 
         const result = await pool.request().query(query);
@@ -1730,12 +1731,11 @@ async function insertPunchLog({ RefId, EmployeeId, PunchType, PunchTime }) {
         .input('EmployeeId',      sql.VarChar(20),       EmployeeId)
         .input('PunchType',       sql.Char(1),           PunchType)
         .input('PunchTime',       sql.DateTime2(7),      new Date(PunchTime))
-        .input('CaptureDateTime', sql.DateTime2(7),      GETDATE())
         .query(`
             INSERT INTO [BBLive].[dbo].[ehr_punch_log]
                 (RefId, EmployeeId, PunchType, PunchTime, CaptureDateTime, PushStatus)
             VALUES
-                (@RefId, @EmployeeId, @PunchType, @PunchTime, @CaptureDateTime, 'Pending')
+                (@RefId, @EmployeeId, @PunchType, @PunchTime, GETDATE(), 'Pending')
         `);
 
     return { inserted: true };
@@ -1758,7 +1758,6 @@ async function getPendingPunchLogs(punchType) {
             SELECT Id, RefId, EmployeeId, PunchType, PunchTime, CaptureDateTime
             FROM [BBLive].[dbo].[ehr_punch_log]
             WHERE PunchType = @PunchType AND (PushStatus = 'Pending' OR PushStatus = 'Failed')
-            AND ID = 200
             ORDER BY PunchTime ASC
         `);
     return result.recordset;

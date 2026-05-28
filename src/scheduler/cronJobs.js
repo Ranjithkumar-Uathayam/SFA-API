@@ -238,9 +238,11 @@ async function runEhrPushSync(punchTypeCode) {
 
         log.ok(`EHR ${label} Push COMPLETE — ${succeededIds.length} Pushed, ${failedIds.length} Failed | elapsed: ${elapsed(startTime)}`);
 
-    } catch (err) {
+    } 
+    catch (err) {
         log.error(`EHR ${label} Push unhandled error after ${elapsed(startTime)}: ${err.message}`);
-    } finally {
+    } 
+    finally {
         setGuard(false);
         log.info(`──────────── EHR ${label.toUpperCase()} PUSH END ────────────`);
     }

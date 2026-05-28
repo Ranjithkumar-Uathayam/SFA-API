@@ -39,6 +39,7 @@ const syncController    = require('./src/controllers/syncController');
 const pushController    = require('./src/controllers/pushController');
 const productController = require('./src/controllers/productController');
 const masterController  = require('./src/controllers/masterController');
+const ehrController     = require('./src/controllers/ehrController');
 const { startCronJobs } = require('./src/scheduler/cronJobs');
 
 const app = express();
@@ -87,6 +88,14 @@ app.post('/api/products/push-all', productController.pushAllProducts);
 app.get ('/api/master/:masterType/list',     masterController.getMasterList);
 app.post('/api/master/:masterType/push',     masterController.pushMasterRecords);
 app.post('/api/master/:masterType/push-all', masterController.pushAllMasterRecords);
+
+// ── EHR Attendance routes ──────────────────────────────────────────────────
+app.get ('/api/ehr/logs',                   ehrController.getEhrLogs);
+app.post('/api/ehr/trigger/sf-checkin',     ehrController.triggerSFCheckIn);
+app.post('/api/ehr/trigger/sf-checkout',    ehrController.triggerSFCheckOut);
+app.post('/api/ehr/trigger/ehr-checkin',    ehrController.triggerEHRCheckIn);
+app.post('/api/ehr/trigger/ehr-checkout',   ehrController.triggerEHRCheckOut);
+app.post('/api/ehr/push/:id',              ehrController.pushSingleRecord);
 
 // Health check (JSON for API consumers)
 app.get('/health', (req, res) => {

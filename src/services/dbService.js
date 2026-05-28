@@ -1777,6 +1777,83 @@ async function updatePunchLogStatusByIds(ids, status) {
     );
 }
 
+async function getEhrLogsPaged({ page = 1, limit = 50, search, punchType, pushStatus, dateFrom, dateTo } = {}) {
+    const pool      = await getPool();
+    const offset    = (page - 1) * limit;
+    const searchVal = search     ? `%${search}%` : null;
+    const typeVal   = punchType  || null;
+    const statusVal = pushStatus || null;
+    const fromVal   = dateFrom   || null;
+    const toVal     = dateTo     || null;
+
+    const dataQuery = `
+        SELECT
+            COUNT(*) OVER() AS TotalCount,
+            Id, RefId, EmployeeId, PunchType, PunchTime, CaptureDateTime, PushStatus
+        FROM [BBLive].[dbo].[ehr_punch_log]
+        WHERE (@search     IS NULL OR EmployeeId LIKE @search OR RefId LIKE @search)
+          AND (@punchType  IS NULL OR PunchType  = @punchType)
+          AND (@pushStatus IS NULL OR PushStatus = @pushStatus)
+          AND (@dateFrom   IS NULL OR CAST(PunchTime AS DATE) >= @dateFrom)
+          AND (@dateTo     IS NULL OR CAST(PunchTime AS DATE) <= @dateTo)
+        ORDER BY Id DESC
+        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `;
+
+    const statsQuery = `
+        SELECT PunchType, PushStatus, COUNT(*) AS Count
+        FROM [BBLive].[dbo].[ehr_punch_log]
+        GROUP BY PunchType, PushStatus
+    `;
+
+    const [dataRes, statsRes] = await Promise.all([
+        pool.request()
+            .input('search',     sql.NVarChar(200), searchVal)
+            .input('punchType',  sql.Char(1),       typeVal)
+            .input('pushStatus', sql.NVarChar(20),  statusVal)
+            .input('dateFrom',   sql.Date,          fromVal ? new Date(fromVal) : null)
+            .input('dateTo',     sql.Date,          toVal   ? new Date(toVal)   : null)
+            .input('offset',     sql.Int,           offset)
+            .input('limit',      sql.Int,           limit)
+            .query(dataQuery),
+        pool.request().query(statsQuery),
+    ]);
+
+    const records = dataRes.recordset;
+    const total   = records.length > 0 ? records[0].TotalCount : 0;
+
+    const stats = {
+        checkin:  { Pending: 0, Pushed: 0, Failed: 0, total: 0 },
+        checkout: { Pending: 0, Pushed: 0, Failed: 0, total: 0 },
+    };
+    for (const row of statsRes.recordset) {
+        const key = row.PunchType === 'I' ? 'checkin' : 'checkout';
+        if (stats[key][row.PushStatus] !== undefined) stats[key][row.PushStatus] = row.Count;
+        stats[key].total += row.Count;
+    }
+
+    return {
+        data:       records.map(({ TotalCount, ...rest }) => rest),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+        stats,
+    };
+}
+
+async function getPunchLogById(id) {
+    const pool = await getPool();
+    const result = await pool.request()
+        .input('Id', sql.BigInt, id)
+        .query(`
+            SELECT Id, RefId, EmployeeId, PunchType, PunchTime, CaptureDateTime, PushStatus
+            FROM [BBLive].[dbo].[ehr_punch_log]
+            WHERE Id = @Id
+        `);
+    return result.recordset[0] || null;
+}
+
 module.exports = {
     getProductData,
     getProductsPaged,
@@ -1801,4 +1878,6 @@ module.exports = {
     updatePunchLogStatus,
     getPendingPunchLogs,
     updatePunchLogStatusByIds,
+    getEhrLogsPaged,
+    getPunchLogById,
 };

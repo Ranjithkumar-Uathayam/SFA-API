@@ -30,6 +30,18 @@ export class ApiService {
     return this.http.post(`/api/master/${type}/push-all`, filters);
   }
 
+  getEhrLogs(params: Record<string, any>): Observable<any> {
+    return this.http.get('/api/ehr/logs', { params: this.toHttpParams(params) });
+  }
+
+  triggerEhrAction(action: string): Observable<any> {
+    return this.http.post(`/api/ehr/trigger/${action}`, {});
+  }
+
+  pushEhrSingle(id: number): Observable<any> {
+    return this.http.post(`/api/ehr/push/${id}`, {});
+  }
+
   private toHttpParams(obj: Record<string, any>): HttpParams {
     let params = new HttpParams();
     for (const [k, v] of Object.entries(obj)) {

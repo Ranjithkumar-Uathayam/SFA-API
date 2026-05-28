@@ -13,5 +13,9 @@ export const routes: Routes = [
     path: 'master/:type',
     loadComponent: () => import('./components/master/master.component').then(m => m.MasterComponent),
   },
+  {
+    path: 'ehr',
+    loadComponent: () => import('./components/ehr/ehr.component').then(m => m.EhrComponent),
+  },
   { path: '**', redirectTo: '' },
 ];

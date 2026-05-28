@@ -53,5 +53,11 @@ export class DashboardComponent {
       desc: 'Push outstanding invoice data per dealer to Salesforce.',
       link: '/master/outstanding',
     },
+    {
+      icon: '👨‍💼',
+      title: 'E-HR Attendance',
+      desc: 'Monitor attendance punch logs and manually trigger SF→DB sync and DB→EHR API push.',
+      link: '/ehr',
+    },
   ];
 }

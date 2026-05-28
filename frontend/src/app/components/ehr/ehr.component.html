@@ -1,0 +1,212 @@
+<div class="loading-bar" [class.visible]="loading"></div>
+
+<div class="hero">
+  <h1>&#128100; E-HR Attendance Sync</h1>
+  <p>Monitor attendance records and manually trigger sync between Salesforce and the E-HR API.</p>
+</div>
+
+<!-- Stats Section -->
+<div class="stats-section">
+  <div class="stat-group">
+    <div class="stat-group-title">Check-In</div>
+    <div class="stat-cards">
+      <div class="stat-card total">
+        <div class="val">{{ stats.checkin.total }}</div>
+        <div class="lbl">Total</div>
+      </div>
+      <div class="stat-card pending">
+        <div class="val">{{ stats.checkin.Pending }}</div>
+        <div class="lbl">Pending</div>
+      </div>
+      <div class="stat-card pushed">
+        <div class="val">{{ stats.checkin.Pushed }}</div>
+        <div class="lbl">Pushed</div>
+      </div>
+      <div class="stat-card failed">
+        <div class="val">{{ stats.checkin.Failed }}</div>
+        <div class="lbl">Failed</div>
+      </div>
+    </div>
+  </div>
+  <div class="stat-group">
+    <div class="stat-group-title">Check-Out</div>
+    <div class="stat-cards">
+      <div class="stat-card total">
+        <div class="val">{{ stats.checkout.total }}</div>
+        <div class="lbl">Total</div>
+      </div>
+      <div class="stat-card pending">
+        <div class="val">{{ stats.checkout.Pending }}</div>
+        <div class="lbl">Pending</div>
+      </div>
+      <div class="stat-card pushed">
+        <div class="val">{{ stats.checkout.Pushed }}</div>
+        <div class="lbl">Pushed</div>
+      </div>
+      <div class="stat-card failed">
+        <div class="val">{{ stats.checkout.Failed }}</div>
+        <div class="lbl">Failed</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Trigger Actions -->
+<div class="trigger-section">
+  <div class="trigger-group">
+    <div class="trigger-label">Step 1 &mdash; Sync from Salesforce &rarr; DB</div>
+    <div class="trigger-btns">
+      <button class="btn btn-sf" [disabled]="triggering['sf-checkin']"
+        (click)="trigger('sf-checkin', 'SF Check-In Sync')">
+        {{ triggering['sf-checkin'] ? '&#9203; Running&#8230;' : '&#8595; Sync Check-In' }}
+      </button>
+      <button class="btn btn-sf" [disabled]="triggering['sf-checkout']"
+        (click)="trigger('sf-checkout', 'SF Check-Out Sync')">
+        {{ triggering['sf-checkout'] ? '&#9203; Running&#8230;' : '&#8595; Sync Check-Out' }}
+      </button>
+    </div>
+  </div>
+  <div class="trigger-arrow">&#8594;</div>
+  <div class="trigger-group">
+    <div class="trigger-label">Step 2 &mdash; Push from DB &rarr; E-HR API</div>
+    <div class="trigger-btns">
+      <button class="btn btn-ehr" [disabled]="triggering['ehr-checkin']"
+        (click)="trigger('ehr-checkin', 'EHR Check-In Push')">
+        {{ triggering['ehr-checkin'] ? '&#9203; Running&#8230;' : '&#8679; Push Check-In' }}
+      </button>
+      <button class="btn btn-ehr" [disabled]="triggering['ehr-checkout']"
+        (click)="trigger('ehr-checkout', 'EHR Check-Out Push')">
+        {{ triggering['ehr-checkout'] ? '&#9203; Running&#8230;' : '&#8679; Push Check-Out' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Toolbar: search + type/status filters -->
+<div class="toolbar">
+  <input type="text" [(ngModel)]="searchInput" (input)="onSearchInput()"
+    placeholder="Search Employee ID or Ref ID&#8230;" />
+  <select [(ngModel)]="punchTypeFilter" (change)="onFilterChange()">
+    <option value="">All Punch Types</option>
+    <option value="I">Check-In</option>
+    <option value="O">Check-Out</option>
+  </select>
+  <select [(ngModel)]="statusFilter" (change)="onFilterChange()">
+    <option value="">All Statuses</option>
+    <option value="Pending">Pending</option>
+    <option value="Pushed">Pushed</option>
+    <option value="Failed">Failed</option>
+  </select>
+  <select [(ngModel)]="pageLimit" (change)="onPageLimitChange()">
+    <option [ngValue]="25">25 / page</option>
+    <option [ngValue]="50">50 / page</option>
+    <option [ngValue]="100">100 / page</option>
+  </select>
+  <button class="btn btn-outline" (click)="loadPage(currentPage)">&#8635; Refresh</button>
+</div>
+
+<!-- Toolbar: date range filter -->
+<div class="toolbar toolbar-dates">
+  <span class="date-label">Punch Date</span>
+  <div class="date-range">
+    <label>From
+      <input type="date" [(ngModel)]="dateFrom" (change)="onFilterChange()" />
+    </label>
+    <span class="date-sep">&#8212;</span>
+    <label>To
+      <input type="date" [(ngModel)]="dateTo" (change)="onFilterChange()" />
+    </label>
+  </div>
+  @if (dateFrom || dateTo) {
+    <button class="btn btn-ghost-red" (click)="clearDates()">&#10005; Clear Dates</button>
+  }
+  @if (dateFrom || dateTo) {
+    <span class="date-active-badge">Filtered by date</span>
+  }
+</div>
+
+<!-- Table -->
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Employee ID</th>
+        <th>Punch Type</th>
+        <th>Punch Time</th>
+        <th>Capture DateTime</th>
+        <th>Push Status</th>
+        <th style="width:90px">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      @if (loading && records.length === 0) {
+        <tr><td colspan="7">
+          <div class="empty-state"><div class="ei">&#128100;</div><div>Loading&#8230;</div></div>
+        </td></tr>
+      }
+      @if (!loading && records.length === 0) {
+        <tr><td colspan="7">
+          <div class="empty-state"><div class="ei">&#128100;</div><div>No records found</div></div>
+        </td></tr>
+      }
+      @for (row of records; track row.Id) {
+        <tr [class.row-pushing]="isPushing(row.Id)">
+          <td class="mono">{{ row.Id }}</td>
+          <td class="mono">{{ row.EmployeeId }}</td>
+          <td>
+            <span class="badge" [class.badge-ci]="row.PunchType === 'I'" [class.badge-co]="row.PunchType === 'O'">
+              <span class="dot"></span>{{ punchLabel(row.PunchType) }}
+            </span>
+          </td>
+          <td style="white-space:nowrap;font-size:.78rem">{{ fmtDate(row.PunchTime) }}</td>
+          <td style="white-space:nowrap;font-size:.78rem">{{ fmtDate(row.CaptureDateTime) }}</td>
+          <td>
+            @if (isPushing(row.Id)) {
+              <span class="badge badge-pushing"><span class="dot"></span>Pushing&#8230;</span>
+            } @else if (row.PushStatus === 'Pushed') {
+              <span class="badge badge-Pushed"><span class="dot"></span>Pushed</span>
+            } @else if (row.PushStatus === 'Failed') {
+              <span class="badge badge-Failed"><span class="dot"></span>Failed</span>
+            } @else {
+              <span class="badge badge-Pending"><span class="dot"></span>Pending</span>
+            }
+          </td>
+          <td>
+            <button class="push-btn"
+              [disabled]="isPushing(row.Id) || row.PushStatus === 'Pushed'"
+              [class.push-btn-done]="row.PushStatus === 'Pushed'"
+              (click)="pushSingle(row)">
+              @if (isPushing(row.Id)) { &#8230; }
+              @else if (row.PushStatus === 'Pushed') { &#10003; Done }
+              @else { &#8679; Push }
+            </button>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+<div class="pagination">
+  <span class="pg-info">{{ total.toLocaleString() }} records</span>
+  <button class="pg-btn" [disabled]="currentPage === 1" (click)="goToPage(currentPage - 1)">&#8249;</button>
+  @for (p of getPageNumbers(); track $index) {
+    @if (p === '…') {
+      <span class="pg-info">&#8230;</span>
+    } @else {
+      <button class="pg-btn" [class.active]="p === currentPage" (click)="goToPage(+p)">{{ p }}</button>
+    }
+  }
+  <button class="pg-btn" [disabled]="currentPage === totalPages" (click)="goToPage(currentPage + 1)">&#8250;</button>
+</div>
+
+<!-- Toasts -->
+<div class="toast-container">
+  @for (t of toasts; track t.id) {
+    <div class="toast" [class.success]="t.type==='success'" [class.error]="t.type==='error'" [class.info]="t.type==='info'">
+      {{ t.message }}
+    </div>
+  }
+</div>

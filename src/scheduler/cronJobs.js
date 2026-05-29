@@ -261,28 +261,25 @@ function startCronJobs() {
     //     runOutstandingSync();
     // });
     
-    //Attendance Check-In sync (SF → DB) — daily at 11:00 AM
-    cron.schedule('0 11 * * *', () => {
+    cron.schedule('0 11 * * *', async () => {
         log.info('Cron triggered: Attendance Check-In Sync (11:00 AM)');
-        runAttendanceSync('Check-In', 'I');
+        await runAttendanceSync('Check-In', 'I');
     });
     
-    // EHR Check-In push (DB → EHR API) — daily at 11:10 AM
-    cron.schedule('10 11 * * *', () => {
-        log.info('Cron triggered: EHR Check-In Push (11:10 AM)');
-        runEhrPushSync('I');
+    cron.schedule('15 11 * * *', async () => {
+        log.info('Cron triggered: EHR Check-In Push (11:15 AM)');
+        await runEhrPushSync('I');
     });
 
-    // Attendance Check-Out sync (SF → DB) — daily at 11:30 PM
-    cron.schedule('30 23 * * *', () => {
+    cron.schedule('30 23 * * *', async () => {
         log.info('Cron triggered: Attendance Check-Out Sync (11:30 PM)');
-        runAttendanceSync('Check-Out', 'O');
+        await runAttendanceSync('Check-Out', 'O');
     });
 
     // EHR Check-Out push (DB → EHR API) — daily at 11:40 PM
-    cron.schedule('40 23 * * *', () => {
-        log.info('Cron triggered: EHR Check-Out Push (11:40 PM)');
-        runEhrPushSync('O');
+    cron.schedule('45 23 * * *', async () => {
+        log.info('Cron triggered: EHR Check-Out Push (11:45 PM)');
+        await runEhrPushSync('O');
     });
 }
 

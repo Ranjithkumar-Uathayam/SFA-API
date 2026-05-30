@@ -64,7 +64,7 @@ async function getProductData(lastSyncDate, offset = 0, limit = 500) {
             'IMPERIAL COMPUTERS','PACKING MATERIAL','REPAIRS & MAINTENANCE',
             'SALES PROMOTION EXPENSES','EVERYDAY DHOTIE','ALLDAYS DHOTIE',
             'ADD DHOTIE','ADD SHIRT','EVERYDAY SHIRTING','EVERYDAY RDY'
-        )
+        )  
         
         ORDER BY t0.ItemCode
         OFFSET @offset ROWS

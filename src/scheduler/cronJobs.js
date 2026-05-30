@@ -178,11 +178,6 @@ async function runAttendanceSync(punchTypeLabel, punchTypeCode) {
         log.info(`  Skipped (dup/null): ${skipped}`);
         if (failed > 0) log.error(`  Failed            : ${failed}`);
 
-        if (inserted > 0) {
-            log.info(`${inserted} new Pending record(s) inserted — triggering EHR ${punchTypeLabel} push immediately…`);
-            await runEhrPushSync(punchTypeCode);
-        }
-
     } catch (err) {
         log.error(`Attendance ${punchTypeLabel} Sync FAILED after ${elapsed(startTime)}: ${err.message}`);
     } finally {

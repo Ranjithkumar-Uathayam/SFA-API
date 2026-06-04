@@ -1,4 +1,3 @@
-const cron       = require('node-cron');
 const dbService  = require('../services/dbService');
 const sfService  = require('../services/sfService');
 const ehrService = require('../services/ehrService');
@@ -243,36 +242,44 @@ async function runEhrPushSync(punchTypeCode) {
     }
 }
 
-function startCronJobs() {
-    // // Stock inventory sync — every 5 hours (at minute 0)
-    // cron.schedule('0 */5 * * *', () => {
-    //     log.info('Cron triggered: Stock Inventory Sync (every 5 hours)');
-    //     runStockInventorySync();
-    // });
+function scheduleDaily(hour, minute, label, callback) {
+    function msUntilNext() {
+        const now  = new Date();
+        const next = new Date(now);
+        next.setHours(hour, minute, 0, 0);
+        if (next <= now) next.setDate(next.getDate() + 1);
+        return next - now;
+    }
 
-    // // Outstanding sync — every 45 minutes
-    // cron.schedule('*/45 * * * *', () => {
-    //     log.info('Cron triggered: Outstanding Sync (every 45 minutes)');
-    //     runOutstandingSync();
-    // });
-    
-    cron.schedule('0 14 * * *', async () => {
-        log.info('Cron triggered: Attendance Check-In Sync (11:00 AM)');
+    function arm() {
+        const delay = msUntilNext();
+        log.info(`Scheduled: "${label}" — next run in ${Math.round(delay / 60000)} min (at ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')})`);
+        setTimeout(() => {
+            callback();
+            arm();
+        }, delay);
+    }
+
+    arm();
+}
+
+function startCronJobs() {
+    scheduleDaily(14,  0, 'Attendance Check-In Sync (2:00 PM)',  async () => {
+        log.info('Cron triggered: Attendance Check-In Sync (2:00 PM)');
         await runAttendanceSync('Check-In', 'I');
     });
-    
-    cron.schedule('15 14 * * *', async () => {
-        log.info('Cron triggered: EHR Check-In Push (11:15 AM)');
+
+    scheduleDaily(14, 15, 'EHR Check-In Push (2:15 PM)', async () => {
+        log.info('Cron triggered: EHR Check-In Push (2:15 PM)');
         await runEhrPushSync('I');
     });
 
-    cron.schedule('30 23 * * *', async () => {
+    scheduleDaily(23, 30, 'Attendance Check-Out Sync (11:30 PM)', async () => {
         log.info('Cron triggered: Attendance Check-Out Sync (11:30 PM)');
         await runAttendanceSync('Check-Out', 'O');
     });
 
-    // EHR Check-Out push (DB → EHR API) — daily at 11:40 PM
-    cron.schedule('45 23 * * *', async () => {
+    scheduleDaily(23, 45, 'EHR Check-Out Push (11:45 PM)', async () => {
         log.info('Cron triggered: EHR Check-Out Push (11:45 PM)');
         await runEhrPushSync('O');
     });

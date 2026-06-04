@@ -256,12 +256,12 @@ function startCronJobs() {
     //     runOutstandingSync();
     // });
     
-    cron.schedule('0 11 * * *', async () => {
+    cron.schedule('0 14 * * *', async () => {
         log.info('Cron triggered: Attendance Check-In Sync (11:00 AM)');
         await runAttendanceSync('Check-In', 'I');
     });
     
-    cron.schedule('15 11 * * *', async () => {
+    cron.schedule('15 14 * * *', async () => {
         log.info('Cron triggered: EHR Check-In Push (11:15 AM)');
         await runEhrPushSync('I');
     });

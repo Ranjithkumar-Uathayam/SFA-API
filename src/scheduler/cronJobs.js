@@ -254,9 +254,14 @@ function scheduleDaily(hour, minute, label, callback) {
     function arm() {
         const delay = msUntilNext();
         log.info(`Scheduled: "${label}" — next run in ${Math.round(delay / 60000)} min (at ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')})`);
-        setTimeout(() => {
-            callback();
-            arm();
+        setTimeout(async () => {
+            try {
+                await callback();
+            } catch (err) {
+                log.error(`Scheduled job "${label}" threw an unhandled error: ${err.message}`);
+            } finally {
+                arm();
+            }
         }, delay);
     }
 

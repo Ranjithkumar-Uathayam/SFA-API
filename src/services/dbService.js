@@ -171,7 +171,7 @@ async function getSchemeData() {
                 WHEN T1.U_bran='UATHAYAM MENS SET' THEN 'UATHAYAM'
                 WHEN T1.U_bran='ARISER SHIRT'   THEN 'ARISER'
                 WHEN T1.U_bran='ARISER MENS TROUSERS' THEN 'ARISER'
-                WHEN T1.U_bran='ARISER HOS' THEN 'ARISER'
+                WHEN T1.U_bran='ARISER KNITS' THEN 'ARISER'
                 END	
         AS DivisionCode,
             '2026-05-20T00:00:00' AS FromDate,
@@ -345,7 +345,7 @@ async function getBPMasterData() {
                 SELECT *
                 FROM (VALUES
                     ('ARISER',   'ARISER SHIRT',           'U_Dis7'),
-                    ('ARISER',   'ARISER HOS',             'U_Dis3'),
+                    ('ARISER',   'ARISER KNITS',             'U_Dis3'),
                     ('ARISER',   'ARISER MENS TROUSERS',   'U_Dis10'),
                     ('UATHAYAM', 'UATHAYAM DHOTIE',        'U_Dis1'),
                     ('UATHAYAM', 'UATHAYAM SHIRTING',      'U_Dis1'),
@@ -1170,7 +1170,7 @@ async function getBPMasterDataByCodes(cardCodes) {
         WITH SubBrandMap AS (
             SELECT * FROM (VALUES
                 ('ARISER',   'ARISER SHIRT',           'U_Dis7'),
-                ('ARISER',   'ARISER HOS',             'U_Dis3'),
+                ('ARISER',   'ARISER KNITS',             'U_Dis3'),
                 ('ARISER',   'ARISER MENS TROUSERS',   'U_Dis10'),
                 ('UATHAYAM', 'UATHAYAM DHOTIE',        'U_Dis1'),
                 ('UATHAYAM', 'UATHAYAM SHIRTING',      'U_Dis1'),
@@ -1389,7 +1389,7 @@ async function getSchemeDataByCodes(docEntries) {
                 WHEN T1.U_bran='UATHAYAM MENS SET'   THEN 'UATHAYAM'
                 WHEN T1.U_bran='ARISER SHIRT'        THEN 'ARISER'
                 WHEN T1.U_bran='ARISER MENS TROUSERS' THEN 'ARISER'
-                WHEN T1.U_bran='ARISER HOS'          THEN 'ARISER'
+                WHEN T1.U_bran='ARISER KNITS'          THEN 'ARISER'
             END AS DivisionCode,
             '2026-05-20T00:00:00' AS FromDate, '2026-07-01T00:00:00' AS ToDate,
             0 AS AllowDiscountForAllProducts, NULL AS DiscountPer,

@@ -1,20 +1,53 @@
+'use strict';
+
 const cron       = require('node-cron');
 const dbService  = require('../services/dbService');
 const sfService  = require('../services/sfService');
 const ehrService = require('../services/ehrService');
 const mapper     = require('../utils/dataMapper');
 
-function ts()       { return new Date().toISOString().replace('T', ' ').slice(0, 23); }
-function elapsed(t) { return `${((Date.now() - t) / 1000).toFixed(2)}s`; }
+// ─────────────────────────────────────────────────────────────────────────────
+// Logging helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TIMEZONE = 'Asia/Kolkata';
+
+function utcTs() {
+    return new Date().toISOString().replace('T', ' ').slice(0, 23) + ' UTC';
+}
+
+function istTs() {
+    return new Date().toLocaleString('en-IN', {
+        timeZone    : TIMEZONE,
+        year        : 'numeric',
+        month       : '2-digit',
+        day         : '2-digit',
+        hour        : '2-digit',
+        minute      : '2-digit',
+        second      : '2-digit',
+        hour12      : false,
+    });
+}
+
+function elapsed(startMs) {
+    return `${((Date.now() - startMs) / 1000).toFixed(2)}s`;
+}
 
 const log = {
-    info  : (...a) => console.log (`[${ts()}] [CRON] ℹ️ `, ...a),
-    ok    : (...a) => console.log (`[${ts()}] [CRON] ✅`, ...a),
-    warn  : (...a) => console.warn(`[${ts()}] [CRON] ⚠️ `, ...a),
-    error : (...a) => console.error(`[${ts()}] [CRON] ❌`, ...a),
+    info  : (...a) => console.log (`[${utcTs()}] [IST ${istTs()}] [CRON] ℹ️  `, ...a),
+    ok    : (...a) => console.log (`[${utcTs()}] [IST ${istTs()}] [CRON] ✅ `, ...a),
+    warn  : (...a) => console.warn (`[${utcTs()}] [IST ${istTs()}] [CRON] ⚠️  `, ...a),
+    error : (...a) => console.error(`[${utcTs()}] [IST ${istTs()}] [CRON] ❌ `, ...a),
+    banner: (title) => {
+        const line = '─'.repeat(60);
+        console.log(`\n${line}\n  ${title}\n${line}`);
+    },
 };
 
-// Guard flags prevent overlapping runs if a job takes longer than its interval
+// ─────────────────────────────────────────────────────────────────────────────
+// Guard flags — prevent overlapping runs if a job exceeds its interval
+// ─────────────────────────────────────────────────────────────────────────────
+
 let stockSyncRunning       = false;
 let outstandingSyncRunning = false;
 let checkInRunning         = false;
@@ -22,14 +55,19 @@ let checkOutRunning        = false;
 let ehrCheckInRunning      = false;
 let ehrCheckOutRunning     = false;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Stock inventory sync
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function runStockInventorySync() {
     if (stockSyncRunning) {
         log.warn('Stock inventory sync already in progress — skipping this tick.');
         return;
     }
     stockSyncRunning = true;
-    const startTime  = Date.now();
-    log.info('──────────── STOCK INVENTORY SYNC START ────────────');
+    const startTime = Date.now();
+    log.banner('STOCK INVENTORY SYNC START');
+    log.info('Job: runStockInventorySync | IST trigger time noted above');
 
     try {
         log.info('Fetching stock data from DB…');
@@ -44,7 +82,7 @@ async function runStockInventorySync() {
         const payload = mapper.mapToStockPayload(sqlData);
         log.info(`Mapped to ${payload.length} stock record(s)`);
 
-        if (payload.length === 0) {
+        if (!payload.length) {
             log.warn('Mapper produced 0 records — nothing to sync.');
             return;
         }
@@ -52,19 +90,24 @@ async function runStockInventorySync() {
         const sfResult = await sfService.upsertStockInventory(payload);
 
         log.ok(`Stock Inventory Sync COMPLETE — elapsed: ${elapsed(startTime)}`);
-        log.info(`DB rows fetched : ${sqlData.length}`);
-        log.info(`Records sent    : ${sfResult.totalRecords}`);
-        log.ok  (`Success         : ${sfResult.successRecords}`);
-        if (sfResult.failedRecords > 0) {
-            log.error(`Failed          : ${sfResult.failedRecords}`);
-        }
+        log.info(`  DB rows fetched : ${sqlData.length}`);
+        log.info(`  Records sent    : ${sfResult.totalRecords}`);
+        log.ok  (`  Succeeded       : ${sfResult.successRecords}`);
+        if (sfResult.failedRecords > 0)
+            log.error(`  Failed          : ${sfResult.failedRecords}`);
+
     } catch (err) {
         log.error(`Stock Inventory Sync FAILED after ${elapsed(startTime)}: ${err.message}`);
+        log.error(err.stack);
     } finally {
         stockSyncRunning = false;
-        log.info('──────────── STOCK INVENTORY SYNC END ────────────');
+        log.banner('STOCK INVENTORY SYNC END');
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Outstanding sync
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function runOutstandingSync() {
     if (outstandingSyncRunning) {
@@ -72,8 +115,9 @@ async function runOutstandingSync() {
         return;
     }
     outstandingSyncRunning = true;
-    const startTime        = Date.now();
-    log.info('──────────── OUTSTANDING SYNC START ────────────');
+    const startTime = Date.now();
+    log.banner('OUTSTANDING SYNC START');
+    log.info('Job: runOutstandingSync | IST trigger time noted above');
 
     try {
         log.info('Fetching outstanding data from DB…');
@@ -88,7 +132,7 @@ async function runOutstandingSync() {
         const payload = mapper.mapToOutstandingPayload(sqlData);
         log.info(`Mapped to ${payload.length} outstanding record(s)`);
 
-        if (payload.length === 0) {
+        if (!payload.length) {
             log.warn('Mapper produced 0 records — nothing to sync.');
             return;
         }
@@ -96,44 +140,46 @@ async function runOutstandingSync() {
         const sfResult = await sfService.upsertOutstanding(payload);
 
         log.ok(`Outstanding Sync COMPLETE — elapsed: ${elapsed(startTime)}`);
-        log.info(`DB rows fetched : ${sqlData.length}`);
-        log.info(`Records sent    : ${sfResult.totalRecords}`);
-        log.ok  (`Success         : ${sfResult.successRecords}`);
-        if (sfResult.failedRecords > 0) {
-            log.error(`Failed          : ${sfResult.failedRecords}`);
-        }
+        log.info(`  DB rows fetched : ${sqlData.length}`);
+        log.info(`  Records sent    : ${sfResult.totalRecords}`);
+        log.ok  (`  Succeeded       : ${sfResult.successRecords}`);
+        if (sfResult.failedRecords > 0)
+            log.error(`  Failed          : ${sfResult.failedRecords}`);
+
     } catch (err) {
         log.error(`Outstanding Sync FAILED after ${elapsed(startTime)}: ${err.message}`);
+        log.error(err.stack);
     } finally {
         outstandingSyncRunning = false;
-        log.info('──────────── OUTSTANDING SYNC END ────────────');
+        log.banner('OUTSTANDING SYNC END');
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ATTENDANCE — Check-In sync (runs at 11:00 AM daily)
+// Attendance sync (Check-In at 14:00 IST, Check-Out at 23:30 IST)
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function runAttendanceSync(punchTypeLabel, punchTypeCode) {
     const isCheckIn = punchTypeCode === 'I';
-    const guard     = isCheckIn ? () => checkInRunning  : () => checkOutRunning;
+    const getGuard  = ()  => isCheckIn ? checkInRunning  : checkOutRunning;
     const setGuard  = (v) => { if (isCheckIn) checkInRunning = v; else checkOutRunning = v; };
 
-    if (guard()) {
+    if (getGuard()) {
         log.warn(`Attendance ${punchTypeLabel} sync already in progress — skipping this tick.`);
         return;
     }
     setGuard(true);
     const startTime = Date.now();
-    log.info(`──────────── ATTENDANCE ${punchTypeLabel.toUpperCase()} SYNC START ────────────`);
+    log.banner(`ATTENDANCE ${punchTypeLabel.toUpperCase()} SYNC START`);
+    log.info(`Job: runAttendanceSync | PunchType: ${punchTypeCode} (${punchTypeLabel}) | IST trigger time noted above`);
 
     try {
         log.info(`Fetching ${punchTypeLabel} records from Salesforce…`);
         const sfRecords = await sfService.fetchAttendanceRecords(punchTypeLabel);
-        log.info(`Fetched ${sfRecords.length} ${punchTypeLabel} record(s)`);
+        log.info(`Fetched ${sfRecords.length} ${punchTypeLabel} record(s) from Salesforce`);
 
         if (!sfRecords.length) {
-            log.warn(`No ${punchTypeLabel} records found in Salesforce — nothing to sync.`);
+            log.warn(`No ${punchTypeLabel} records in Salesforce — nothing to sync.`);
             return;
         }
 
@@ -152,48 +198,45 @@ async function runAttendanceSync(punchTypeLabel, punchTypeCode) {
 
             try {
                 const result = await dbService.insertPunchLog({
-                    RefId, EmployeeId, PunchType: punchTypeCode, PunchTime
+                    RefId, EmployeeId, PunchType: punchTypeCode, PunchTime,
                 });
 
-                if (result.skipped) 
-                {
+                if (result.skipped) {
                     log.info(`  Duplicate skipped — RefId: ${RefId}`);
                     skipped++;
-                } 
-                else
-                {
+                } else {
                     log.info(`  Inserted (Pending) — RefId: ${RefId} | Employee: ${EmployeeId}`);
                     inserted++;
                 }
             } catch (err) {
                 log.error(`  Insert FAILED — RefId: ${RefId} | ${err.message}`);
-                // Attempt to mark the row as Failed if it was partially written
                 try { await dbService.updatePunchLogStatus(RefId, 'Failed'); } catch (_) {}
                 failed++;
             }
         }
 
         log.ok(`Attendance ${punchTypeLabel} Sync COMPLETE — elapsed: ${elapsed(startTime)}`);
-        log.info(`  Inserted (Pending): ${inserted}`);
-        log.info(`  Skipped (dup/null): ${skipped}`);
-        if (failed > 0) log.error(`  Failed            : ${failed}`);
+        log.info(`  Inserted (Pending) : ${inserted}`);
+        log.info(`  Skipped (dup/null) : ${skipped}`);
+        if (failed > 0) log.error(`  Failed             : ${failed}`);
 
     } catch (err) {
         log.error(`Attendance ${punchTypeLabel} Sync FAILED after ${elapsed(startTime)}: ${err.message}`);
+        log.error(err.stack);
     } finally {
         setGuard(false);
-        log.info(`──────────── ATTENDANCE ${punchTypeLabel.toUpperCase()} SYNC END ────────────`);
+        log.banner(`ATTENDANCE ${punchTypeLabel.toUpperCase()} SYNC END`);
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EHR PUSH — Push Pending punch logs to the E-HR Attendance API
+// EHR push sync (Check-In at 14:15 IST, Check-Out at 23:45 IST)
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function runEhrPushSync(punchTypeCode) {
     const label     = punchTypeCode === 'I' ? 'Check-In' : 'Check-Out';
     const isCheckIn = punchTypeCode === 'I';
-    const getGuard  = () => isCheckIn ? ehrCheckInRunning  : ehrCheckOutRunning;
+    const getGuard  = ()  => isCheckIn ? ehrCheckInRunning  : ehrCheckOutRunning;
     const setGuard  = (v) => { if (isCheckIn) ehrCheckInRunning = v; else ehrCheckOutRunning = v; };
 
     if (getGuard()) {
@@ -202,69 +245,165 @@ async function runEhrPushSync(punchTypeCode) {
     }
     setGuard(true);
     const startTime = Date.now();
-    log.info(`──────────── EHR ${label.toUpperCase()} PUSH START ────────────`);
+    log.banner(`EHR ${label.toUpperCase()} PUSH START`);
+    log.info(`Job: runEhrPushSync | PunchType: ${punchTypeCode} (${label}) | IST trigger time noted above`);
 
     try {
         log.info(`Fetching Pending ${label} records from ehr_punch_log…`);
         const records = await dbService.getPendingPunchLogs(punchTypeCode);
-        log.info(`Found ${records.length} Pending ${label} record(s)`);
+        log.info(`Found ${records.length} Pending ${label} record(s) to push`);
 
         if (!records.length) {
-            log.warn(`No Pending ${label} records — nothing to push.`);
+            log.warn(`No Pending ${label} records — nothing to push to EHR.`);
             return;
         }
 
+        log.info(`Pushing ${records.length} ${label} record(s) to EHR API…`);
         const { results } = await ehrService.pushAttendanceToEhr(records);
 
         const succeededIds = [];
         const failedIds    = [];
+
         for (let i = 0; i < results.length; i++) {
-            const r = results[i];
+            const r      = results[i];
+            const rec    = records[i];
             if (r.success) {
-                succeededIds.push(records[i].Id);
+                succeededIds.push(rec.Id);
+                log.info(`  Pushed  — Id: ${rec.Id} | Employee: ${rec.EmployeeId ?? 'N/A'}`);
             } else {
-                failedIds.push(records[i].Id);
-                log.error(`  Record ${records[i].Id} FAILED — HTTP ${r.status ?? 'N/A'} | ${JSON.stringify(r.error)}`);
+                failedIds.push(rec.Id);
+                log.error(`  FAILED  — Id: ${rec.Id} | HTTP ${r.status ?? 'N/A'} | ${JSON.stringify(r.error)}`);
             }
         }
 
-        if (succeededIds.length) await dbService.updatePunchLogStatusByIds(succeededIds, 'Pushed');
-        if (failedIds.length)    await dbService.updatePunchLogStatusByIds(failedIds,    'Failed');
+        if (succeededIds.length) {
+            await dbService.updatePunchLogStatusByIds(succeededIds, 'Pushed');
+            log.ok(`  DB updated → Pushed for ${succeededIds.length} record(s)`);
+        }
+        if (failedIds.length) {
+            await dbService.updatePunchLogStatusByIds(failedIds, 'Failed');
+            log.error(`  DB updated → Failed for ${failedIds.length} record(s)`);
+        }
 
-        log.ok(`EHR ${label} Push COMPLETE — ${succeededIds.length} Pushed, ${failedIds.length} Failed | elapsed: ${elapsed(startTime)}`);
+        log.ok(
+            `EHR ${label} Push COMPLETE — ` +
+            `Pushed: ${succeededIds.length}, Failed: ${failedIds.length} | ` +
+            `elapsed: ${elapsed(startTime)}`
+        );
 
-    } 
-    catch (err) {
+    } catch (err) {
         log.error(`EHR ${label} Push unhandled error after ${elapsed(startTime)}: ${err.message}`);
-    } 
-    finally {
+        log.error(err.stack);
+    } finally {
         setGuard(false);
-        log.info(`──────────── EHR ${label.toUpperCase()} PUSH END ────────────`);
+        log.banner(`EHR ${label.toUpperCase()} PUSH END`);
     }
 }
 
+
 function scheduleDaily(hour, minute, label, callback) {
-    const h  = String(hour).padStart(2, '0');
-    const m  = String(minute).padStart(2, '0');
+    const hh   = String(hour).padStart(2, '0');
+    const mm   = String(minute).padStart(2, '0');
     const expr = `${minute} ${hour} * * *`;
 
+    // Validate the expression before registering
+    if (!cron.validate(expr)) {
+        log.error(`[REGISTRATION FAILED] Invalid cron expression "${expr}" for job "${label}"`);
+        return;
+    }
+
+    log.info(`[REGISTERING] "${label}" | cron: "${expr}" | timezone: ${TIMEZONE} | time: ${hh}:${mm} IST`);
+
     cron.schedule(expr, async () => {
-        log.info(`Cron triggered: "${label}"`);
+        const fireTime = Date.now();
+        log.info(`━━━ CRON TRIGGERED ━━━ "${label}" | IST: ${istTs()}`);
+
         try {
             await callback();
         } catch (err) {
-            log.error(`Scheduled job "${label}" threw an unhandled error: ${err.message}`);
+            log.error(`Unhandled error in scheduled job "${label}": ${err.message}`);
+            log.error(err.stack);
+        } finally {
+            log.info(`━━━ CRON FINISHED  ━━━ "${label}" | elapsed: ${elapsed(fireTime)}`);
         }
-    }, { timezone: 'Asia/Kolkata' });
+    }, { timezone: TIMEZONE });
 
-    log.info(`Scheduled: "${label}" — cron "${expr}" (Asia/Kolkata) at ${h}:${m}`);
+    log.ok(`[REGISTERED]  "${label}" — will fire daily at ${hh}:${mm} IST (cron: "${expr}")`);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// startCronJobs — called once from index.js inside app.listen() callback
+// ─────────────────────────────────────────────────────────────────────────────
 
 function startCronJobs() {
-    scheduleDaily(14,  0, 'Attendance Check-In Sync (2:00 PM)',   async () => { await runAttendanceSync('Check-In',  'I'); });
-    scheduleDaily(14, 15, 'EHR Check-In Push (2:15 PM)',          async () => { await runEhrPushSync('I'); });
-    scheduleDaily(23, 30, 'Attendance Check-Out Sync (11:30 PM)', async () => { await runAttendanceSync('Check-Out', 'O'); });
-    scheduleDaily(23, 45, 'EHR Check-Out Push (11:45 PM)',        async () => { await runEhrPushSync('O'); });
+    log.banner('CRON SCHEDULER INITIALIZING');
+
+    // ── Environment diagnostic ───────────────────────────────────────────────
+    const serverTz     = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const nowUtc       = new Date().toISOString();
+    const nowIst       = new Date().toLocaleString('en-IN', { timeZone: TIMEZONE, hour12: false });
+    const nodeVersion  = process.version;
+    const pid          = process.pid;
+
+    log.info(`Node.js version  : ${nodeVersion}`);
+    log.info(`Process PID      : ${pid}`);
+    log.info(`Server timezone  : ${serverTz}`);
+    log.info(`Current time UTC : ${nowUtc}`);
+    log.info(`Current time IST : ${nowIst}`);
+    log.info(`Scheduled tz     : ${TIMEZONE}`);
+
+    if (serverTz !== TIMEZONE) {
+        log.warn(
+            `Server timezone (${serverTz}) differs from scheduler timezone (${TIMEZONE}). ` +
+            `All scheduleDaily() times are evaluated in ${TIMEZONE} — this is correct ` +
+            `because node-cron is given an explicit timezone option.`
+        );
+    }
+
+    // ── Job registration ─────────────────────────────────────────────────────
+    log.info('Registering daily cron jobs…');
+
+    scheduleDaily(14,  0, 'Attendance Check-In Sync (2:00 PM IST)',
+        async () => { await runAttendanceSync('Check-In',  'I'); }
+    );
+
+    scheduleDaily(14, 15, 'EHR Check-In Push (2:15 PM IST)',
+        async () => { await runEhrPushSync('I'); }
+    );
+
+    scheduleDaily(23, 30, 'Attendance Check-Out Sync (11:30 PM IST)',
+        async () => { await runAttendanceSync('Check-Out', 'O'); }
+    );
+
+    scheduleDaily(23, 45, 'EHR Check-Out Push (11:45 PM IST)',
+        async () => { await runEhrPushSync('O'); }
+    );
+
+    // ── Registration summary ─────────────────────────────────────────────────
+    log.banner('CRON SCHEDULER READY');
+    log.ok('All 4 daily jobs registered successfully:');
+    log.ok('  [1] Attendance Check-In  Sync — 14:00 IST  (cron: "0 14 * * *")');
+    log.ok('  [2] EHR Check-In         Push — 14:15 IST  (cron: "15 14 * * *")');
+    log.ok('  [3] Attendance Check-Out Sync — 23:30 IST  (cron: "30 23 * * *")');
+    log.ok('  [4] EHR Check-Out        Push — 23:45 IST  (cron: "45 23 * * *")');
+    log.info('node-cron evaluates every 60 s against Asia/Kolkata wall clock.');
+    log.info('Jobs will fire regardless of server OS timezone setting.');
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Global safety net — log unhandled rejections so no silent job failures
+// ─────────────────────────────────────────────────────────────────────────────
+
+process.on('unhandledRejection', (reason, promise) => {
+    log.error('Unhandled Promise Rejection detected:');
+    log.error(`  Reason  : ${reason instanceof Error ? reason.message : String(reason)}`);
+    if (reason instanceof Error) log.error(reason.stack);
+});
+
+process.on('uncaughtException', (err) => {
+    log.error(`Uncaught Exception: ${err.message}`);
+    log.error(err.stack);
+    // Do NOT call process.exit() here — let PM2 / the OS decide restart policy.
+});
 
 module.exports = { startCronJobs, runAttendanceSync, runEhrPushSync };

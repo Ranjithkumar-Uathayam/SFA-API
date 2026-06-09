@@ -430,7 +430,7 @@ async function getBPMasterData() {
                                 AND RIGHT(ISNULL(T0.Cellular,''),10) NOT LIKE '%[^0-9]%'
                             THEN RIGHT(T0.Cellular,10)
 
-                            ELSE ''
+                            ELSE '9999999999'
                         END AS PhoneNumber,
 
                         CASE 
@@ -446,7 +446,7 @@ async function getBPMasterData() {
                                 AND RIGHT(ISNULL(T0.Cellular,''),10) NOT LIKE '%[^0-9]%'
                             THEN RIGHT(T0.Cellular,10)
 
-                            ELSE ''
+                            ELSE '9999999999'
                         END AS MobileNumber,
                         ISNULL(T0.E_Mail,'') AS Email,
                         ISNULL(T0.U_GSTIN,'') AS GSTNo,
@@ -505,7 +505,7 @@ async function getBPMasterData() {
                                 AND RIGHT(ISNULL(T0.Cellular,''),10) NOT LIKE '%[^0-9]%'
                             THEN RIGHT(T0.Cellular,10)
 
-                            ELSE ''
+                            ELSE '9999999999'
                         END AS MobileNum,
                          CASE 
                             WHEN LEN(RIGHT(ISNULL(T0.Phone1,''),10)) = 10 
@@ -520,7 +520,7 @@ async function getBPMasterData() {
                                 AND RIGHT(ISNULL(T0.Cellular,''),10) NOT LIKE '%[^0-9]%'
                             THEN RIGHT(T0.Cellular,10)
 
-                            ELSE ''
+                            ELSE '9999999999'
                         END AS WhatsAppNum,
                         E_MailL                                    AS EmailID,
                         CASE WHEN Active = 'Y' THEN 1 ELSE 0 END  AS IsActive,

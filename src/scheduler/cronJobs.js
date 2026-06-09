@@ -248,9 +248,10 @@ async function runEhrPushSync(punchTypeCode) {
     log.banner(`EHR ${label.toUpperCase()} PUSH START`);
     log.info(`Job: runEhrPushSync | PunchType: ${punchTypeCode} (${label}) | IST trigger time noted above`);
 
+    let records = [];
     try {
         log.info(`Fetching Pending ${label} records from ehr_punch_log…`);
-        const records = await dbService.getPendingPunchLogs(punchTypeCode);
+        records = await dbService.getPendingPunchLogs(punchTypeCode);
         log.info(`Found ${records.length} Pending ${label} record(s) to push`);
 
         if (!records.length) {
@@ -294,6 +295,12 @@ async function runEhrPushSync(punchTypeCode) {
     } catch (err) {
         log.error(`EHR ${label} Push unhandled error after ${elapsed(startTime)}: ${err.message}`);
         log.error(err.stack);
+        if (records.length) {
+            const allIds = records.map(r => r.Id);
+            await dbService.updatePunchLogStatusByIds(allIds, 'Failed')
+                .catch(dbErr => log.error(`Failed to mark records as Failed in DB: ${dbErr.message}`));
+            log.error(`  DB updated → Failed for ${allIds.length} record(s) due to unhandled error`);
+        }
     } finally {
         setGuard(false);
         log.banner(`EHR ${label.toUpperCase()} PUSH END`);

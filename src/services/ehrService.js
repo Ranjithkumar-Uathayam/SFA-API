@@ -150,7 +150,17 @@ async function pushAttendanceToEhr(records) {
     const url = EHR_BASE_URL();
     if (!url) throw new Error('EHR_BASE_URL is not set in .env');
 
-    const token = await getEhrToken();
+    let token;
+    try {
+        token = await getEhrToken();
+    } catch (authErr) {
+        log.error(`EHR auth failed — marking all ${records.length} record(s) as failed: ${authErr.message}`);
+        return {
+            results: records.map(record => ({
+                record, success: false, status: null, data: null, error: authErr.message,
+            })),
+        };
+    }
 
     log.info(`Pushing ${records.length} record(s) individually to EHR Attendance API — ${url}`);
 

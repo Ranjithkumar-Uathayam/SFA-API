@@ -1888,7 +1888,7 @@ async function upsertEhrTriggerLog(jobKey, punchType, triggeredAt, status, compl
                     UpdatedAt       = @UpdatedAt
             WHEN NOT MATCHED THEN
                 INSERT (JobKey, PunchType, LastTriggeredAt, LastCompletedAt, LastStatus, UpdatedAt)
-                VALUES (@JobKey, @PunchType, @LastTriggeredAt, @LastCompletedAt, @LastStatus, @UpdatedAt);
+                VALUES (@JobKey, @PunchType, @LastTriggeredAt, @LastCompletedAt, @LastStatus, GETDATE());
         `);
 }
 

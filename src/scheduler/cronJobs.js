@@ -230,7 +230,7 @@ async function runAttendanceSync(punchTypeLabel, punchTypeCode) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EHR push sync (Check-In at 14:15 IST, Check-Out at 23:45 IST)
+// EHR push sync (Check-In and Check-Out — every 90 minutes)
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function runEhrPushSync(punchTypeCode) {
@@ -338,6 +338,31 @@ function scheduleDaily(hour, minute, label, callback) {
     log.ok(`[REGISTERED]  "${label}" — will fire daily at ${hh}:${mm} IST (cron: "${expr}")`);
 }
 
+function scheduleInterval(intervalMinutes, label, callback) {
+    const intervalMs = intervalMinutes * 60 * 1000;
+
+    log.info(`[REGISTERING] "${label}" | interval: every ${intervalMinutes} min`);
+
+    const run = async () => {
+        const fireTime = Date.now();
+        log.info(`━━━ INTERVAL TRIGGERED ━━━ "${label}" | IST: ${istTs()}`);
+        try {
+            await callback();
+        } catch (err) {
+            log.error(`Unhandled error in interval job "${label}": ${err.message}`);
+            log.error(err.stack);
+        } finally {
+            log.info(`━━━ INTERVAL FINISHED  ━━━ "${label}" | elapsed: ${elapsed(fireTime)}`);
+        }
+    };
+
+    // Fire immediately on startup, then repeat every intervalMs
+    run();
+    setInterval(run, intervalMs);
+
+    log.ok(`[REGISTERED]  "${label}" — fires every ${intervalMinutes} minutes (first run: immediate)`);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // startCronJobs — called once from index.js inside app.listen() callback
 // ─────────────────────────────────────────────────────────────────────────────
@@ -374,7 +399,7 @@ function startCronJobs() {
         async () => { await runAttendanceSync('Check-In',  'I'); }
     );
 
-    scheduleDaily(14, 15, 'EHR Check-In Push (2:15 PM IST)',
+    scheduleInterval(90, 'EHR Check-In Push (every 90 min)',
         async () => { await runEhrPushSync('I'); }
     );
 
@@ -382,17 +407,17 @@ function startCronJobs() {
         async () => { await runAttendanceSync('Check-Out', 'O'); }
     );
 
-    scheduleDaily(23, 45, 'EHR Check-Out Push (11:45 PM IST)',
+    scheduleInterval(90, 'EHR Check-Out Push (every 90 min)',
         async () => { await runEhrPushSync('O'); }
     );
 
     // ── Registration summary ─────────────────────────────────────────────────
     log.banner('CRON SCHEDULER READY');
-    log.ok('All 4 daily jobs registered successfully:');
+    log.ok('All 4 jobs registered successfully:');
     log.ok('  [1] Attendance Check-In  Sync — 14:00 IST  (cron: "0 14 * * *")');
-    log.ok('  [2] EHR Check-In         Push — 14:15 IST  (cron: "15 14 * * *")');
+    log.ok('  [2] EHR Check-In         Push — every 90 minutes (interval)');
     log.ok('  [3] Attendance Check-Out Sync — 23:30 IST  (cron: "30 23 * * *")');
-    log.ok('  [4] EHR Check-Out        Push — 23:45 IST  (cron: "45 23 * * *")');
+    log.ok('  [4] EHR Check-Out        Push — every 90 minutes (interval)');
     log.info('node-cron evaluates every 60 s against Asia/Kolkata wall clock.');
     log.info('Jobs will fire regardless of server OS timezone setting.');
 }

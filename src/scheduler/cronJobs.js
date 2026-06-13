@@ -244,9 +244,16 @@ async function runEhrPushSync(punchTypeCode) {
         return;
     }
     setGuard(true);
-    const startTime = Date.now();
+    const startTime  = Date.now();
+    const triggeredAt = new Date();
+    const jobKey     = punchTypeCode === 'I' ? 'EHR_CHECKIN' : 'EHR_CHECKOUT';
+
     log.banner(`EHR ${label.toUpperCase()} PUSH START`);
     log.info(`Job: runEhrPushSync | PunchType: ${punchTypeCode} (${label}) | IST trigger time noted above`);
+
+    // Record trigger start in DB
+    dbService.upsertEhrTriggerLog(jobKey, punchTypeCode, triggeredAt, 'Running')
+        .catch(e => log.error(`upsertEhrTriggerLog (Running) failed: ${e.message}`));
 
     let records = [];
     try {
@@ -256,6 +263,8 @@ async function runEhrPushSync(punchTypeCode) {
 
         if (!records.length) {
             log.warn(`No Pending ${label} records — nothing to push to EHR.`);
+            dbService.upsertEhrTriggerLog(jobKey, punchTypeCode, triggeredAt, 'Completed', new Date())
+                .catch(e => log.error(`upsertEhrTriggerLog (Completed) failed: ${e.message}`));
             return;
         }
 
@@ -286,6 +295,10 @@ async function runEhrPushSync(punchTypeCode) {
             log.error(`  DB updated → Failed for ${failedIds.length} record(s)`);
         }
 
+        const finalStatus = failedIds.length > 0 ? 'CompletedWithErrors' : 'Completed';
+        dbService.upsertEhrTriggerLog(jobKey, punchTypeCode, triggeredAt, finalStatus, new Date())
+            .catch(e => log.error(`upsertEhrTriggerLog (${finalStatus}) failed: ${e.message}`));
+
         log.ok(
             `EHR ${label} Push COMPLETE — ` +
             `Pushed: ${succeededIds.length}, Failed: ${failedIds.length} | ` +
@@ -295,6 +308,8 @@ async function runEhrPushSync(punchTypeCode) {
     } catch (err) {
         log.error(`EHR ${label} Push unhandled error after ${elapsed(startTime)}: ${err.message}`);
         log.error(err.stack);
+        dbService.upsertEhrTriggerLog(jobKey, punchTypeCode, triggeredAt, 'Failed', new Date())
+            .catch(e => log.error(`upsertEhrTriggerLog (Failed) failed: ${e.message}`));
         if (records.length) {
             const allIds = records.map(r => r.Id);
             await dbService.updatePunchLogStatusByIds(allIds, 'Failed')

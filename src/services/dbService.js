@@ -1854,6 +1854,44 @@ async function getPunchLogById(id) {
     return result.recordset[0] || null;
 }
 
+/**
+ * Upsert one row per JobKey in SFA_EhrJobLog.
+ * Call with status='Running' on trigger start, 'Completed'/'Failed' on finish.
+ *
+ * DDL (run once):
+ *   CREATE TABLE [BBLive].[dbo].[SFA_EhrJobLog] (
+ *       JobKey          VARCHAR(50) NOT NULL PRIMARY KEY,
+ *       PunchType       CHAR(1)     NOT NULL,
+ *       LastTriggeredAt DATETIME    NOT NULL,
+ *       LastCompletedAt DATETIME    NULL,
+ *       LastStatus      VARCHAR(20) NOT NULL,
+ *       UpdatedAt       DATETIME    NOT NULL
+ *   );
+ */
+async function upsertEhrTriggerLog(jobKey, punchType, triggeredAt, status, completedAt = null) {
+    const pool = await getPool();
+    await pool.request()
+        .input('JobKey',          sql.VarChar(50),  jobKey)
+        .input('PunchType',       sql.Char(1),      punchType)
+        .input('LastTriggeredAt', sql.DateTime,     triggeredAt)
+        .input('LastCompletedAt', sql.DateTime,     completedAt)
+        .input('LastStatus',      sql.VarChar(20),  status)
+        .input('UpdatedAt',       sql.DateTime,     new Date())
+        .query(`
+            MERGE [BBLive].[dbo].[SFA_EhrJobLog] AS T
+            USING (SELECT @JobKey AS JobKey) AS S ON T.JobKey = S.JobKey
+            WHEN MATCHED THEN
+                UPDATE SET
+                    LastTriggeredAt = @LastTriggeredAt,
+                    LastCompletedAt = @LastCompletedAt,
+                    LastStatus      = @LastStatus,
+                    UpdatedAt       = @UpdatedAt
+            WHEN NOT MATCHED THEN
+                INSERT (JobKey, PunchType, LastTriggeredAt, LastCompletedAt, LastStatus, UpdatedAt)
+                VALUES (@JobKey, @PunchType, @LastTriggeredAt, @LastCompletedAt, @LastStatus, @UpdatedAt);
+        `);
+}
+
 module.exports = {
     getProductData,
     getProductsPaged,
@@ -1880,4 +1918,5 @@ module.exports = {
     updatePunchLogStatusByIds,
     getEhrLogsPaged,
     getPunchLogById,
+    upsertEhrTriggerLog,
 };

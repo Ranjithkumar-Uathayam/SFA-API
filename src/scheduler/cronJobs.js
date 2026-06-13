@@ -395,6 +395,10 @@ function startCronJobs() {
     // ── Job registration ─────────────────────────────────────────────────────
     log.info('Registering daily cron jobs…');
 
+    scheduleDaily(11,  0, 'Attendance Check-In Sync (2:00 PM IST)',
+        async () => { await runAttendanceSync('Check-In',  'I'); }
+    );
+
     scheduleDaily(14,  0, 'Attendance Check-In Sync (2:00 PM IST)',
         async () => { await runAttendanceSync('Check-In',  'I'); }
     );

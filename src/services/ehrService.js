@@ -46,9 +46,14 @@ async function getEhrToken() {
             { headers: { 'Content-Type': 'application/json' }, timeout: EHR_TIMEOUT() }
         );
 
-        // API returns the JWT token as a plain string in the response body
-        const token = res.data
-        if (!token) {
+        // EHR API may return the token as a plain string OR as a JSON object
+        let token = res.data;
+        if (token && typeof token === 'object') {
+            // Try common field names returned by EHR/JWT APIs
+            token = token.Token ?? token.token ?? token.access_token
+                 ?? token.BearerToken ?? token.jwt ?? token.data ?? token.result;
+        }
+        if (!token || typeof token !== 'string') {
             throw new Error(`Unexpected auth response format: ${JSON.stringify(res.data)}`);
         }
 
@@ -69,12 +74,15 @@ async function getEhrToken() {
 // ─────────────────────────────────────────────────────────────────────────────
 // PUSH
 // ─────────────────────────────────────────────────────────────────────────────
+const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000; // +5:30
+
 function formatDateTime(value) {
     if (!value) return null;
-
-    return new Date(value)
-        .toISOString()
-        .slice(0, 19);
+    // PunchTime is stored as UTC in DB (sourced from Salesforce).
+    // EHR API is an Indian system and expects IST wall-clock time with no timezone suffix.
+    const utcMs  = new Date(value).getTime();
+    const istMs  = utcMs + IST_OFFSET_MS;
+    return new Date(istMs).toISOString().slice(0, 19); // "YYYY-MM-DDTHH:mm:ss" in IST
 }
 /**
  * Push a single attendance record to the EHR Attendance API.

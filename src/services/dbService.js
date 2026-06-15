@@ -1756,7 +1756,9 @@ async function getPendingPunchLogs(punchType) {
         .query(`
             SELECT Id, RefId, EmployeeId, PunchType, PunchTime, CaptureDateTime
             FROM [BBLive].[dbo].[ehr_punch_log]
-            WHERE PunchType = @PunchType AND (PushStatus = 'Pending' OR PushStatus = 'Failed')
+            WHERE PunchType  = @PunchType
+              AND (PushStatus = 'Pending' OR PushStatus = 'Failed')
+              AND CAST(PunchTime AS DATE) >= CAST(DATEADD(day, -3, GETDATE()) AS DATE)
             ORDER BY PunchTime ASC
         `);
     return result.recordset;

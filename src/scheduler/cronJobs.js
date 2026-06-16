@@ -414,21 +414,33 @@ function startCronJobs() {
         async () => { await runAttendanceSync('Check-In',  'I'); }
     );
 
+    scheduleDaily(11,  15, 'Attendance Check-In Sync (2:00 PM IST)',
+        async () => { await runEhrPushSync('I') }
+    );
+
     scheduleDaily(14,  0, 'Attendance Check-In Sync (2:00 PM IST)',
         async () => { await runAttendanceSync('Check-In',  'I'); }
     );
 
-    scheduleInterval(90, 'EHR Check-In Push (every 90 min)',
-        async () => { await runEhrPushSync('I'); }
+    scheduleDaily(14,  15, 'Attendance Check-In Sync (2:00 PM IST)',
+        async () => { await runEhrPushSync('I') }
     );
+
+    // scheduleInterval(90, 'EHR Check-In Push (every 90 min)',
+    //     async () => { await runEhrPushSync('I'); }
+    // );
 
     scheduleDaily(23, 30, 'Attendance Check-Out Sync (11:30 PM IST)',
         async () => { await runAttendanceSync('Check-Out', 'O'); }
     );
 
-    scheduleInterval(110, 'EHR Check-Out Push (every 110 min)',
+    scheduleDaily(23, 40, 'Attendance Check-Out Sync (11:30 PM IST)',
         async () => { await runEhrPushSync('O'); }
     );
+
+    // scheduleInterval(110, 'EHR Check-Out Push (every 110 min)',
+    //     async () => { await runEhrPushSync('O'); }
+    // );
 
     // ── Registration summary ─────────────────────────────────────────────────
     log.banner('CRON SCHEDULER READY');

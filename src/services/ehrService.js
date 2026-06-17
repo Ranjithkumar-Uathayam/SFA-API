@@ -86,12 +86,12 @@ const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000; // +5:30
 
 function formatDateTime(value) {
     if (!value) return null;
-    // PunchTime is stored as UTC in DB (sourced from Salesforce).
-    // EHR API is an Indian system and expects IST wall-clock time with no timezone suffix.
-    const utcMs  = new Date(value).getTime();
-    const istMs  = utcMs + IST_OFFSET_MS;
-    return new Date(istMs).toISOString().slice(0, 19); // "YYYY-MM-DDTHH:mm:ss" in IST
+
+    return new Date(value)
+        .toISOString()
+        .slice(0, 19);
 }
+
 /**
  * Push a single attendance record to the EHR Attendance API.
  * Retries on 5xx; stops immediately on 4xx.

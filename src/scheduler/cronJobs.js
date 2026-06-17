@@ -244,22 +244,40 @@ async function runEhrPushSync(punchTypeCode) {
         return;
     }
     setGuard(true);
-    const startTime  = Date.now();
+    const startTime   = Date.now();
     const triggeredAt = new Date();
-    const jobKey     = punchTypeCode === 'I' ? 'EHR_CHECKIN' : 'EHR_CHECKOUT';
+    const jobKey      = punchTypeCode === 'I' ? 'EHR_CHECKIN' : 'EHR_CHECKOUT';
 
     log.banner(`EHR ${label.toUpperCase()} PUSH START`);
     log.info(`Job: runEhrPushSync | PunchType: ${punchTypeCode} (${label}) | IST trigger time noted above`);
+
+    // ── Pre-flight env var check ──────────────────────────────────────────────
+    // Abort early with a clear message rather than letting a missing var surface
+    // as a cryptic failure deep inside ehrService that marks all records Failed.
+    const requiredVars = ['EHR_TOKEN_URL', 'EHR_BASE_URL', 'EHR_CLIENT_ID', 'EHR_CLIENT_SECRET'];
+    const missingVars  = requiredVars.filter(k => !process.env[k]);
+    if (missingVars.length) {
+        log.error(`EHR Push ABORTED — missing env var(s): ${missingVars.join(', ')}`);
+        log.error('Records remain Pending and will be retried on the next scheduled run.');
+        setGuard(false);
+        log.banner(`EHR ${label.toUpperCase()} PUSH END`);
+        return;
+    }
+    log.info(`ENV check OK | EHR_TOKEN_URL: ${process.env.EHR_TOKEN_URL} | EHR_BASE_URL: ${process.env.EHR_BASE_URL}`);
 
     // Record trigger start in DB
     dbService.upsertEhrTriggerLog(jobKey, punchTypeCode, triggeredAt, 'Running')
         .catch(e => log.error(`upsertEhrTriggerLog (Running) failed: ${e.message}`));
 
     let records = [];
+    // Track which IDs have already been processed so the outer catch block does
+    // not overwrite a Pushed status with Failed if the DB update itself throws.
+    const processedIds = new Set();
+
     try {
-        log.info(`Fetching Pending ${label} records from ehr_punch_log…`);
+        log.info(`Fetching Pending/Failed ${label} records from ehr_punch_log…`);
         records = await dbService.getPendingPunchLogs(punchTypeCode);
-        log.info(`Found ${records.length} Pending ${label} record(s) to push`);
+        log.info(`Found ${records.length} record(s) to push`);
 
         if (!records.length) {
             log.warn(`No Pending ${label} records — nothing to push to EHR.`);
@@ -268,6 +286,10 @@ async function runEhrPushSync(punchTypeCode) {
             return;
         }
 
+        records.forEach((r, i) =>
+            log.info(`  [${i + 1}/${records.length}] Id:${r.Id} | Emp:${r.EmployeeId} | PunchTime:${r.PunchTime} | Status:${r.PushStatus}`)
+        );
+
         log.info(`Pushing ${records.length} ${label} record(s) to EHR API…`);
         const { results } = await ehrService.pushAttendanceToEhr(records);
 
@@ -275,8 +297,8 @@ async function runEhrPushSync(punchTypeCode) {
         const failedIds    = [];
 
         for (let i = 0; i < results.length; i++) {
-            const r      = results[i];
-            const rec    = records[i];
+            const r   = results[i];
+            const rec = records[i];
             if (r.success) {
                 succeededIds.push(rec.Id);
                 log.info(`  Pushed  — Id: ${rec.Id} | Employee: ${rec.EmployeeId ?? 'N/A'}`);
@@ -286,13 +308,25 @@ async function runEhrPushSync(punchTypeCode) {
             }
         }
 
+        // Wrap each DB update independently so a failure updating Pushed records
+        // does NOT fall into the outer catch and overwrite them with Failed.
         if (succeededIds.length) {
-            await dbService.updatePunchLogStatusByIds(succeededIds, 'Pushed');
-            log.ok(`  DB updated → Pushed for ${succeededIds.length} record(s)`);
+            try {
+                await dbService.updatePunchLogStatusByIds(succeededIds, 'Pushed');
+                succeededIds.forEach(id => processedIds.add(id));
+                log.ok(`  DB updated → Pushed for ${succeededIds.length} record(s)`);
+            } catch (dbErr) {
+                log.error(`  DB update FAILED for ${succeededIds.length} Pushed record(s) — they remain Pending for retry: ${dbErr.message}`);
+            }
         }
         if (failedIds.length) {
-            await dbService.updatePunchLogStatusByIds(failedIds, 'Failed');
-            log.error(`  DB updated → Failed for ${failedIds.length} record(s)`);
+            try {
+                await dbService.updatePunchLogStatusByIds(failedIds, 'Failed');
+                failedIds.forEach(id => processedIds.add(id));
+                log.error(`  DB updated → Failed for ${failedIds.length} record(s)`);
+            } catch (dbErr) {
+                log.error(`  DB update FAILED for ${failedIds.length} Failed record(s): ${dbErr.message}`);
+            }
         }
 
         const finalStatus = failedIds.length > 0 ? 'CompletedWithErrors' : 'Completed';
@@ -310,11 +344,13 @@ async function runEhrPushSync(punchTypeCode) {
         log.error(err.stack);
         dbService.upsertEhrTriggerLog(jobKey, punchTypeCode, triggeredAt, 'Failed', new Date())
             .catch(e => log.error(`upsertEhrTriggerLog (Failed) failed: ${e.message}`));
-        if (records.length) {
-            const allIds = records.map(r => r.Id);
-            await dbService.updatePunchLogStatusByIds(allIds, 'Failed')
+        // Only mark records as Failed if they have not already been processed above
+        // (prevents overwriting a successful Pushed status if the DB update itself threw).
+        const unprocessedIds = records.map(r => r.Id).filter(id => !processedIds.has(id));
+        if (unprocessedIds.length) {
+            await dbService.updatePunchLogStatusByIds(unprocessedIds, 'Failed')
                 .catch(dbErr => log.error(`Failed to mark records as Failed in DB: ${dbErr.message}`));
-            log.error(`  DB updated → Failed for ${allIds.length} record(s) due to unhandled error`);
+            log.error(`  DB updated → Failed for ${unprocessedIds.length} unprocessed record(s) due to unhandled error`);
         }
     } finally {
         setGuard(false);

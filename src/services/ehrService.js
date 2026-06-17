@@ -34,21 +34,29 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
  * Token is NOT cached — refreshed on every push cycle as required.
  */
 async function getEhrToken() {
-    const url = EHR_TOKEN_URL();
-    if (!url) throw new Error('EHR_TOKEN_URL is not set in .env');
+    const url      = EHR_TOKEN_URL();
+    const clientId = EHR_CLIENT_ID();
+    const secret   = EHR_CLIENT_SECRET();
 
-    log.info(`Requesting EHR token from ${url}…`);
+    if (!url)      throw new Error('EHR_TOKEN_URL is not set in .env');
+    if (!clientId) throw new Error('EHR_CLIENT_ID is not set in .env');
+    if (!secret)   throw new Error('EHR_CLIENT_SECRET is not set in .env');
+
+    log.info(`Requesting EHR token | URL: ${url} | ClientId present: ${!!clientId} | Secret present: ${!!secret}`);
 
     try {
         const res = await axios.post(
             url,
-            { ClientId: EHR_CLIENT_ID(), ClientSecret: EHR_CLIENT_SECRET() },
+            { ClientId: clientId, ClientSecret: secret },
             { headers: { 'Content-Type': 'application/json' }, timeout: EHR_TIMEOUT() }
         );
+
+        log.info(`Auth response — HTTP ${res.status} | Content-Type: ${res.headers['content-type'] ?? 'N/A'} | Body type: ${typeof res.data}`);
 
         // EHR API may return the token as a plain string OR as a JSON object
         let token = res.data;
         if (token && typeof token === 'object') {
+            log.info(`Auth response keys: ${Object.keys(token).join(', ')}`);
             // Try common field names returned by EHR/JWT APIs
             token = token.Token ?? token.token ?? token.access_token
                  ?? token.BearerToken ?? token.jwt ?? token.data ?? token.result;
@@ -57,7 +65,7 @@ async function getEhrToken() {
             throw new Error(`Unexpected auth response format: ${JSON.stringify(res.data)}`);
         }
 
-        log.ok('EHR token acquired successfully.');
+        log.ok(`EHR token acquired successfully — length: ${token.length} chars, starts: ${token.substring(0, 8)}…`);
         return token;
 
     } catch (err) {
@@ -65,7 +73,7 @@ async function getEhrToken() {
         const body   = JSON.stringify(err.response?.data ?? err.message);
         log.error('EHR Authentication FAILED');
         log.error(`  URL    : ${url}`);
-        log.error(`  Status : ${status ?? 'N/A'}`);
+        log.error(`  Status : ${status ?? 'N/A (network error)'}`);
         log.error(`  Body   : ${body}`);
         throw new Error(`EHR Auth Failed [HTTP ${status ?? 'N/A'}]: ${err.response?.data?.message ?? err.message}`);
     }
@@ -92,7 +100,12 @@ async function pushSingleRecord(token, record) {
     const url        = EHR_BASE_URL();
     const maxRetries = EHR_MAX_RETRIES();
     const retryDelay = EHR_RETRY_DELAY();
-    
+
+    if (!url) {
+        log.error('EHR_BASE_URL is not set — cannot push record');
+        return { success: false, status: null, data: null, error: 'EHR_BASE_URL missing' };
+    }
+
     const payload = {
         EmployeeId     : record.EmployeeId,
         PunchType      : record.PunchType,
@@ -100,7 +113,7 @@ async function pushSingleRecord(token, record) {
         CaptureDateTime: formatDateTime(record.CaptureDateTime),
     };
 
-    log.info(`  Sending: ${JSON.stringify(payload)}`);
+    log.info(`  Sending to ${url}: ${JSON.stringify(payload)}`);
 
     let lastErr = null;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {

@@ -462,10 +462,6 @@ function startCronJobs() {
         async () => { await runEhrPushSync('I') }
     );
 
-    // scheduleInterval(90, 'EHR Check-In Push (every 90 min)',
-    //     async () => { await runEhrPushSync('I'); }
-    // );
-
     scheduleDaily(23, 30, 'Attendance Check-Out Sync (11:30 PM IST)',
         async () => { await runAttendanceSync('Check-Out', 'O'); }
     );
@@ -474,19 +470,8 @@ function startCronJobs() {
         async () => { await runEhrPushSync('O'); }
     );
 
-    // scheduleInterval(110, 'EHR Check-Out Push (every 110 min)',
-    //     async () => { await runEhrPushSync('O'); }
-    // );
-
     // ── Registration summary ─────────────────────────────────────────────────
     log.banner('CRON SCHEDULER READY');
-    log.ok('All 4 jobs registered successfully:');
-    log.ok('  [1] Attendance Check-In  Sync — 14:00 IST  (cron: "0 14 * * *")');
-    log.ok('  [2] EHR Check-In         Push — every 90 minutes (interval)');
-    log.ok('  [3] Attendance Check-Out Sync — 23:30 IST  (cron: "30 23 * * *")');
-    log.ok('  [4] EHR Check-Out        Push — every 110 minutes (interval)');
-    log.info('node-cron evaluates every 60 s against Asia/Kolkata wall clock.');
-    log.info('Jobs will fire regardless of server OS timezone setting.');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
